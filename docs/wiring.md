@@ -5,6 +5,11 @@ the board. Confirm against the Nucleo-F446RE pinout (UM1724) and CubeMX when you
 it up in Phase 0+. The point of writing it now is to think the I/O through before the
 parts land, not to lock it.
 
+Board pinout reference: `STM32_NUCLEO_F446RE_Pinout.png` (in this folder). Note the
+two header styles: Arduino headers (CN5/6/8/9, nicknames like A0/D13) and Morpho
+headers (CN7/CN10, real chip names like PA0). A0 and PA0 are the SAME physical pin,
+two labels. The firmware always uses the chip name (PA0 = GPIOA pin 0).
+
 ## Pin map (proposed)
 
 | Function | Signal | STM32 pin | Nucleo header | Notes |

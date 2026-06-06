@@ -15,10 +15,10 @@ Legend: [ ] not started, [~] in progress, [x] done, (HW) needs the board.
 - [ ] Toolchain pre-downloaded locally (`pio run` once, so Phase 0 is instant)
 
 ## 0. Toolchain (HW)
-- [ ] Plug in Nucleo over Mini-USB, ST-LINK enumerates
-- [ ] `pio run -t upload` flashes the scaffold
-- [ ] Blink LD2 (PA5) via HAL_GPIO
-- [ ] Step through with the onboard ST-LINK debugger (breakpoint, inspect)
+- [x] Plug in Nucleo over Mini-USB, ST-LINK enumerates (needed STSW-LINK009 driver for Code 28)
+- [x] `pio run -t upload` flashes (no ST-LINK firmware upgrade needed; OpenOCD verified OK)
+- [x] Blink LD2 (PA5) via HAL_GPIO : confirmed ~1 Hz on board 2026-06-05
+- [ ] Step through with the onboard ST-LINK debugger (breakpoint, inspect) : optional, later
 
 ## 1. FreeRTOS
 - [ ] Add FreeRTOS (kernel via middleware or lib_deps)
