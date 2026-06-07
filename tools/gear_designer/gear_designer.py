@@ -34,12 +34,13 @@ def gear_outline(module, z, pa_deg=20.0, backlash=0.10, n=18):
     s_max = math.sqrt(max((ra / rb) ** 2 - 1.0, 0.0))
     s = np.linspace(0.0, s_max, n)
     ix = rb * (np.cos(s) + s * np.sin(s))
-    iy = rb * (np.sin(s) - s * np.cos(s))
+    iy = -rb * (np.sin(s) - s * np.cos(s))   # reflected: flank curves IN so the tooth
+                                             # narrows toward the tip (not widens)
 
     # rotate the flank so the tooth is symmetric about the +x axis, with a half tooth
     # thickness at the pitch circle (minus backlash so printed teeth don't bind)
     s_p = math.sqrt(max((rp / rb) ** 2 - 1.0, 0.0))
-    ang_p = math.atan2(rb * (math.sin(s_p) - s_p * math.cos(s_p)),
+    ang_p = math.atan2(-rb * (math.sin(s_p) - s_p * math.cos(s_p)),
                        rb * (math.cos(s_p) + s_p * math.sin(s_p)))
     half = math.pi / (2 * z) - backlash / rp        # backlash thins the tooth slightly
     rot = half - ang_p
