@@ -16,7 +16,8 @@ import serial
 from serial.tools import list_ports
 from PyQt6 import QtWidgets, QtCore
 
-SMIN, SMAX = 800, 2200          # must match the firmware clamp
+SMIN, SMAX = 1280, 1650         # must match the firmware clamp (safe gripper band)
+OPEN_US, CLOSE_US = 1350, 1650  # measured open / full-close
 
 
 class ServoTest(QtWidgets.QMainWindow):
@@ -27,13 +28,13 @@ class ServoTest(QtWidgets.QMainWindow):
         c = QtWidgets.QWidget(); self.setCentralWidget(c)
         v = QtWidgets.QVBoxLayout(c)
 
-        self.val = QtWidgets.QLabel('1500 us')
+        self.val = QtWidgets.QLabel(f'{OPEN_US} us')
         self.val.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         f = self.val.font(); f.setPointSize(22); f.setBold(True); self.val.setFont(f)
         v.addWidget(self.val)
 
         self.slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        self.slider.setRange(SMIN, SMAX); self.slider.setValue(1500)
+        self.slider.setRange(SMIN, SMAX); self.slider.setValue(OPEN_US)
         self.slider.setTickInterval(100); self.slider.setTickPosition(
             QtWidgets.QSlider.TickPosition.TicksBelow)
         self.slider.valueChanged.connect(self.on_slider)
@@ -47,7 +48,7 @@ class ServoTest(QtWidgets.QMainWindow):
         v.addLayout(row)
 
         row2 = QtWidgets.QHBoxLayout()
-        for txt, val in [('min %d' % SMIN, SMIN), ('center 1500', 1500), ('max %d' % SMAX, SMAX)]:
+        for txt, val in [('OPEN %d' % OPEN_US, OPEN_US), ('CLOSE %d' % CLOSE_US, CLOSE_US)]:
             b = QtWidgets.QPushButton(txt); b.clicked.connect(lambda _, vv=val: self.set_us(vv))
             row2.addWidget(b)
         v.addLayout(row2)
@@ -59,7 +60,7 @@ class ServoTest(QtWidgets.QMainWindow):
         # drain the incoming EMG stream so the OS buffer never overflows
         self._stop = threading.Event()
         threading.Thread(target=self._drain, daemon=True).start()
-        self.set_us(1500)
+        self.set_us(OPEN_US)
 
     def _drain(self):
         while not self._stop.is_set():

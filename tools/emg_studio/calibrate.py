@@ -24,13 +24,14 @@ from emg_studio import Ring, SerialReader
 
 TEMPLATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates.json')
 SLOT_LABELS = ['relaxed', 'open', 'close']
+SLOT_COLORS = ['#1f77b4', '#2ca02c', '#9467bd', '#8c564b', '#17becf', '#bcbd22', '#e377c2']
 
 # --- panel heights in px : tweak these to taste ---
 LIVE_H = 230        # live envelope preview
 REC_H = 250         # recorded capture / trim
-SLOT_H = 160        # the 3 comparison slots
-TABLE_MIN_H = 220   # library table minimum (it expands to fill the rest)
-WIN_H = 1080        # window height
+SLOT_H = 360        # the 3 comparison slots
+TABLE_MIN_H = 180   # library table minimum (it expands to fill the rest)
+WIN_H = 900        # window height
 
 
 def resample(a, n):
@@ -259,14 +260,15 @@ class CalibrateWindow(QtWidgets.QMainWindow):
         for label, p in self.slot_plots.items():
             p.clear()
             p.setTitle(f'{label}  ({len(by_label[label])} active)')
-            for env in by_label[label]:
-                p.plot(np.linspace(0, 1, 50), resample(env, 50), pen=pg.mkPen('#bbbbbb', width=1))
+            for j, env in enumerate(by_label[label]):
+                p.plot(np.linspace(0, 1, 50), resample(env, 50),
+                       pen=pg.mkPen(SLOT_COLORS[j % len(SLOT_COLORS)], width=2))
             if self.rec_env is not None and self.region is not None and cur == label:
                 x0, x1 = self.region.getRegion(); fs = self.args.fs
                 i0 = max(0, int(x0 * fs)); i1 = min(len(self.rec_env), int(x1 * fs))
                 if i1 - i0 >= 2:
                     p.plot(np.linspace(0, 1, 50), resample(self.rec_env[i0:i1], 50),
-                           pen=pg.mkPen('#e67e22', width=2))
+                           pen=pg.mkPen('#000000', width=3))   # in-progress capture: bold black
 
 
 def main():

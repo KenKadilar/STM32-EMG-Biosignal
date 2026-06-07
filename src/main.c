@@ -19,16 +19,20 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define SMIN     800        /* clamp: conservative travel limits (widen once verified) */
-#define SMAX     2200
+/* Measured gripper limits: 1250 us = max open (gears lock below), 1650 us = full close
+ * (fingers touch above). Clamp just inside the lock limit and at the close limit so the
+ * PLA can't be driven into a hard stop. Open rest = 1350, close = 1650. */
+#define SMIN     1280
+#define SMAX     1650
+#define SERVO_OPEN  1350    /* boot/rest position (gripper open, not gripping) */
 #define SLEW     4          /* us per 5 ms loop -> ~800 us/s : gentle, never slams      */
 
 static ADC_HandleTypeDef  hadc1;
 static UART_HandleTypeDef huart2;
 static TIM_HandleTypeDef  htim4;
 
-static volatile int target_us  = 1500;     /* commanded position (set by RX ISR) */
-static int          current_us = 1500;     /* slewed actual position             */
+static volatile int target_us  = SERVO_OPEN;   /* commanded position (set by RX ISR) */
+static int          current_us = SERVO_OPEN;   /* slewed actual position; boots open */
 
 static char rxbuf[16];
 static int  rxi = 0;
@@ -119,7 +123,7 @@ static void servo_init(void)
     htim4.Init.Period = 20000 - 1; htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     HAL_TIM_PWM_Init(&htim4);
     TIM_OC_InitTypeDef oc = {0};
-    oc.OCMode = TIM_OCMODE_PWM1; oc.Pulse = 1500; oc.OCPolarity = TIM_OCPOLARITY_HIGH;
+    oc.OCMode = TIM_OCMODE_PWM1; oc.Pulse = SERVO_OPEN; oc.OCPolarity = TIM_OCPOLARITY_HIGH;
     HAL_TIM_PWM_ConfigChannel(&htim4, &oc, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
 }

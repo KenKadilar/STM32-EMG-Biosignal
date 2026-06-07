@@ -808,7 +808,7 @@
       "name": "relaxed_1",
       "id": "legacy-0",
       "created": "",
-      "active": false
+      "active": true
     },
     {
       "label": "close",
@@ -1216,7 +1216,7 @@
       "name": "close_1",
       "id": "legacy-1",
       "created": "",
-      "active": false
+      "active": true
     },
     {
       "label": "open",
@@ -1623,14 +1623,14 @@
       "name": "open_1",
       "id": "legacy-2",
       "created": "",
-      "active": false
+      "active": true
     },
     {
       "id": "260607-143259-669",
       "name": "relaxed_2",
       "label": "relaxed",
       "created": "2026-06-07 14:32:59",
-      "active": false,
+      "active": true,
       "env": [
         10.57,
         10.56,
@@ -2441,7 +2441,7 @@
       "name": "close_2",
       "label": "close",
       "created": "2026-06-07 14:33:58",
-      "active": false,
+      "active": true,
       "env": [
         11.39,
         9.82,
@@ -2851,7 +2851,7 @@
       "name": "open_2",
       "label": "open",
       "created": "2026-06-07 14:35:08",
-      "active": false,
+      "active": true,
       "env": [
         27.41,
         27.59,
@@ -3260,7 +3260,7 @@
       "name": "relaxed_3",
       "label": "relaxed",
       "created": "2026-06-07 14:35:33",
-      "active": false,
+      "active": true,
       "env": [
         13.5,
         12.79,
@@ -4071,7 +4071,7 @@
       "name": "close_3",
       "label": "close",
       "created": "2026-06-07 14:36:01",
-      "active": false,
+      "active": true,
       "env": [
         7.3,
         7.47,
@@ -4483,7 +4483,7 @@
       "name": "open_3",
       "label": "open",
       "created": "2026-06-07 14:37:18",
-      "active": false,
+      "active": true,
       "env": [
         7.4,
         7.49,

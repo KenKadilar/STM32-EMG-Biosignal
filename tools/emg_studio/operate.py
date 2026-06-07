@@ -52,11 +52,15 @@ def dtw(a, b):
 
 
 class Monitor(QtWidgets.QMainWindow):
-    def __init__(self, args, env_ring, raw_ring, groups, order):
+    def __init__(self, args, env_ring, raw_ring, groups, order, ser):
         super().__init__()
         self.args = args
         self.env_ring = env_ring
         self.raw_ring = raw_ring
+        self.ser = ser              # serial: write S<us> servo commands on gripper change
+        self.open_us = int(args.open_us)
+        self.close_us = int(args.close_us)
+        self.last_sent = None
         self.groups = groups        # label -> list of {'n':, 'res':} (active templates)
         self.order = order          # label display order
         self.tick = 0
@@ -192,6 +196,15 @@ class Monitor(QtWidgets.QMainWindow):
         vals = [vd[label] for label in self.order]
         self.step_fsm(env_now, vd)
 
+        # drive the gripper when the decision changes it
+        if self.gripper != self.last_sent:
+            us = self.close_us if self.gripper == 'close' else self.open_us
+            try:
+                self.ser.write(f'S{us}\n'.encode())
+            except Exception:
+                pass
+            self.last_sent = self.gripper
+
         self.csv.writerow([f'{time.time() - self.t0:.3f}'] + [f'{v:.2f}' for v in vals]
                           + [f'{env_now:.1f}', self.state, self.gripper, self.fired])
 
@@ -237,6 +250,8 @@ def main():
     ap.add_argument('--seconds', type=float, default=6.0)
     ap.add_argument('--env-max', type=float, default=600.0)
     ap.add_argument('--fs-disp', type=float, default=25.0, help='update/DTW rate (Hz)')
+    ap.add_argument('--open-us', type=int, default=1350, help='servo us for OPEN')
+    ap.add_argument('--close-us', type=int, default=1650, help='servo us for CLOSE')
     args = ap.parse_args()
     signal.signal(signal.SIGINT, signal.SIG_IGN)   # immune to stray SIGINT; close via window
 
@@ -273,7 +288,7 @@ def main():
     reader = SerialReader(ser, args, sig_ring, env_ring, raw_ring); reader.start()
 
     app = QtWidgets.QApplication(sys.argv)
-    win = Monitor(args, env_ring, raw_ring, groups, order); win.resize(1050, 760); win.show()
+    win = Monitor(args, env_ring, raw_ring, groups, order, ser); win.resize(1050, 760); win.show()
     try:
         app.exec()
     finally:
