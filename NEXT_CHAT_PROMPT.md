@@ -43,7 +43,6 @@ on-chip single-gesture detector -> CAN (MCP2515 over SPI) -> safety (IWDG watchd
 failsafe) -> ship (CI exists; add demo video). Re-anchor on `STM32_project_goals.md` if scope tempts.
 
 ## HARD RULES
-- **NEVER give Can time/effort estimates** (he works ~18 h/day, finds them useless). Scope + steps only.
 - **No em-dashes or en-dashes** in any Can-facing or public text.
 - When you hand off, **append your own "## Handoff 5 (date)" section to `STM32_project_goals.md`**
   (don't edit earlier sections), and update this file + `HANDOFF.md`.
