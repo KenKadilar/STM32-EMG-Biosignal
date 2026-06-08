@@ -25,7 +25,7 @@ from PyQt6 import QtWidgets, QtCore
 import pyqtgraph as pg
 
 
-def rbj_notch(fs, f0, q):
+def rbj_notch(fs, f0, q=2.5):
     """Second-order RBJ notch coefficients (b0,b1,b2,a1,a2), a0-normalized."""
     w0 = 2 * math.pi * f0 / fs
     alpha = math.sin(w0) / (2 * q)
@@ -34,10 +34,21 @@ def rbj_notch(fs, f0, q):
     return 1 / a0, (-2 * c) / a0, 1 / a0, (-2 * c) / a0, (1 - alpha) / a0
 
 
-class Notch:
-    """Stateful direct-form-I biquad, one sample at a time."""
-    def __init__(self, fs, f0, q=2.5):
-        self.b0, self.b1, self.b2, self.a1, self.a2 = rbj_notch(fs, f0, q)
+def rbj_highpass(fs, f0, q=0.707):
+    """Second-order RBJ high-pass coefficients (b0,b1,b2,a1,a2), a0-normalized.
+    Removes DC drift + slow movement-artifact 'bounces' (< f0); EMG (>~20 Hz) passes."""
+    w0 = 2 * math.pi * f0 / fs
+    alpha = math.sin(w0) / (2 * q)
+    c = math.cos(w0)
+    a0 = 1 + alpha
+    return (1 + c) / 2 / a0, -(1 + c) / a0, (1 + c) / 2 / a0, (-2 * c) / a0, (1 - alpha) / a0
+
+
+class Biquad:
+    """Stateful direct-form-I biquad, one sample at a time. Build from an rbj_notch /
+    rbj_highpass coefficient tuple."""
+    def __init__(self, coeffs):
+        self.b0, self.b1, self.b2, self.a1, self.a2 = coeffs
         self.x1 = self.x2 = self.y1 = self.y2 = 0.0
 
     def __call__(self, x):
@@ -46,6 +57,10 @@ class Notch:
         self.x2, self.x1 = self.x1, x
         self.y2, self.y1 = self.y1, y
         return y
+
+    def reset(self, x=0.0, y=0.0):
+        self.x1 = self.x2 = x
+        self.y1 = self.y2 = y
 
 
 class Ring:
@@ -74,14 +89,18 @@ class SerialReader(threading.Thread):
     def __init__(self, ser, args, sig_ring, env_ring, raw_ring):
         super().__init__(daemon=True)
         self.ser = ser
-        self.notch = Notch(args.fs, args.mains)
+        self.notch = Biquad(rbj_notch(args.fs, args.mains))   # mains notch (50/60 Hz)
         self.sig_ring, self.env_ring, self.raw_ring = sig_ring, env_ring, raw_ring
         self.W = max(1, int(0.05 * args.fs))     # ~50 ms envelope smoothing
-        self.DC_A = 0.001                         # slow display-baseline tracker (~causal, frozen once stored)
-        self.dc = 1850.0
+        self.DC_A = 0.001            # slow DC-baseline tracker. NOT a high-pass: the Grove sensor's
+        self.DC_A_fast = 0.05        # fast convergence for the first ~1.5 s so the baseline settles
+        self.settle = int(1.5 * args.fs)   # quickly at startup instead of drifting for ~8 s on DC_A alone
+        self.dc = 1850.0             # output is already an envelope (low-freq); a 20 Hz HP killed it.
         self.sm = np.zeros(self.W); self.si = 0; self.ssum = 0.0
         self._stop = threading.Event()
         self.primed = False
+        self._prime_buf = []    # first samples, median-seeded into dc (ignores a fragment first line)
+        self._reprime = False   # Qt thread sets this; the reader snaps back to relaxed
         self._rec = None        # when a list, each sample's (centered, env) is appended
 
     def run(self):
@@ -97,20 +116,38 @@ class SerialReader(threading.Thread):
                 v = float(int(ln))
             except ValueError:
                 continue
+            if self._reprime:        # decision fired -> evict the finished pulse from the DTW
+                self._reprime = False  # window by clearing history + the envelope MA. Do NOT reseed
+                self.sig_ring.fill(0.0)   # dc/notch , they track the baseline fine; reseeding dc
+                self.env_ring.fill(0.0)   # mid-contraction injects an offset that washes out slowly.
+                self.sm[:] = 0.0
+                self.ssum = 0.0; self.si = 0
             if not self.primed:
-                # assume a relaxed start: prime filter + buffers so DTW reads "relaxed"
-                # from t=0 instead of drifting for ~5 s while the window fills from zeros
-                self.notch.x1 = self.notch.x2 = self.notch.y1 = self.notch.y2 = v
-                self.dc = v
-                self.raw_ring.fill(v)
+                # Seed the HP from the MEDIAN of the first ~15 samples, not the single first
+                # sample. The first serial line after connect is often a fragment (e.g. "85" out
+                # of "1850"); seeding the filter off that injects a startup transient. Median
+                # rejects the outlier so the envelope is clean from t=0.
+                self._prime_buf.append(v)
+                if len(self._prime_buf) < 15:
+                    continue
+                base = float(np.median(self._prime_buf))
+                self.notch.reset(base, base)    # notch passes DC -> steady output = base at rest
+                self.dc = base
+                self.raw_ring.fill(base)
                 self.sig_ring.fill(0.0)
                 self.env_ring.fill(0.0)
+                self._prime_buf = []
                 self.primed = True
                 continue
             nt = self.notch(v)
-            self.dc += self.DC_A * (nt - self.dc)
+            a = self.DC_A
+            if self.settle > 0:                     # startup: converge to the true baseline FAST
+                a = self.DC_A_fast; self.settle -= 1
+            self.dc += a * (nt - self.dc)           # track + subtract the DC bias (slow drift after settle)
             centered = nt - self.dc
-            rect = abs(centered)
+            rect = centered if centered > 0.0 else 0.0   # HALF-wave: keep the contraction swing, DROP the
+                                                         # negative "echo" lobe. Full-wave abs() folded every
+                                                         # biphasic pulse into TWO humps (real + echo).
             self.ssum += rect - self.sm[self.si]
             self.sm[self.si] = rect
             self.si = (self.si + 1) % self.W
@@ -124,6 +161,14 @@ class SerialReader(threading.Thread):
 
     def stop(self):
         self._stop.set()
+
+    def reprime(self):
+        """Clear the rolling DTW window (rings + envelope MA) on the reader's next sample,
+        so a just-finished pulse stops 'seeing' itself for ~1 window-length and blocking the
+        next one. Does NOT reseed dc/notch (reseeding the slow dc tracker mid-contraction
+        poisons the envelope for seconds). Thread-safe: only flips a flag; the reader thread
+        does the flush, preserving the Ring's single-writer invariant."""
+        self._reprime = True
 
     def start_record(self):
         self._rec = []

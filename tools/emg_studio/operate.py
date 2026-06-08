@@ -52,12 +52,14 @@ def dtw(a, b):
 
 
 class Monitor(QtWidgets.QMainWindow):
-    def __init__(self, args, env_ring, raw_ring, groups, order, ser):
+    def __init__(self, args, sig_ring, env_ring, raw_ring, groups, order, ser, reader):
         super().__init__()
         self.args = args
+        self.sig_ring = sig_ring
         self.env_ring = env_ring
         self.raw_ring = raw_ring
         self.ser = ser              # serial: write S<us> servo commands on gripper change
+        self.reader = reader        # SerialReader: reprime() it on decide to flush the DTW window
         self.open_us = int(args.open_us)
         self.close_us = int(args.close_us)
         self.last_sent = None
@@ -71,13 +73,14 @@ class Monitor(QtWidgets.QMainWindow):
         self.dtw_hist = {label: Ring(self.hist_n, fill=np.nan) for label in order}
         self.tx = np.arange(self.hist_n) / args.fs_disp
 
-        # CSV log
+        # CSV log -> logs/ subfolder (keep them out of the .py directory)
         stamp = time.strftime('%y%m%d-%H%M%S')
-        self.logf = open(os.path.join(os.path.dirname(TEMPLATES_PATH), f'dtw_log_{stamp}.csv'),
-                         'w', newline='')
+        log_dir = os.path.join(os.path.dirname(TEMPLATES_PATH), 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        self.logf = open(os.path.join(log_dir, f'dtw_log_{stamp}.csv'), 'w', newline='')
         self.csv = csv.writer(self.logf)
         self.csv.writerow(['t_s'] + [f"dtw_{label}" for label in order]
-                          + ['env', 'fsm', 'gripper', 'fired'])
+                          + ['env', 'fsm', 'npulse', 'gripper', 'fired'])
 
         self.setWindowTitle('EMG Studio : DTW monitor')
         central = QtWidgets.QWidget(); self.setCentralWidget(central)
@@ -105,37 +108,38 @@ class Monitor(QtWidgets.QMainWindow):
         def mkspin(lo, hi, val, step):
             s = QtWidgets.QDoubleSpinBox(); s.setRange(lo, hi); s.setValue(val); s.setSingleStep(step)
             s.setMaximumWidth(90); return s
-        self.sb_acton = mkspin(0, 600, 40, 5)
-        self.sb_cap = mkspin(0, 9999, 1500, 50)
-        self.sb_margin = mkspin(1.0, 5.0, 1.3, 0.1)
-        self.sb_lockout = mkspin(0, 5, 1.2, 0.1)
-        for lbl, w in [('activity env >', self.sb_acton), ('DTW cap <', self.sb_cap),
-                       ('margin x', self.sb_margin), ('lockout s', self.sb_lockout)]:
-            ctrl.addWidget(QtWidgets.QLabel(lbl)); ctrl.addWidget(w)
+        self.sb_thr = mkspin(0, 700, 400, 10)   # TOGGLE the gripper when the raw signal dips below -this
+        ctrl.addWidget(QtWidgets.QLabel('toggle when raw < -')); ctrl.addWidget(self.sb_thr)
         ctrl.addStretch(1)
         root.addLayout(ctrl)
 
-        # event-based decision FSM
-        self.state = 'IDLE'; self.gripper = 'open'; self.fired = ''
-        self.min_act = {}; self.reset_timer = 0; self.lock_ticks = 0
-        self.reset_need = max(1, int(0.3 * args.fs_disp))   # ~0.3 s of rest to re-arm
-        self.age = 0; self.warm_need = int(3.0 * args.fs_disp)   # warm-up: ignore decisions ~3 s
+        # SIMPLEST decision: TOGGLE the gripper each time raw dips below -threshold (one toggle per dip)
+        self.gripper = 'open'; self.fired = ''; self.state = 'ARMED'
+        self.toggle_armed = True; self.npulse = 0   # npulse kept = 0 only so the CSV/label don't break
 
         pg.setConfigOption('background', 'w'); pg.setConfigOption('foreground', 'k')
         pg.setConfigOptions(antialias=True)
         glw = pg.GraphicsLayoutWidget(); root.addWidget(glw)
 
-        self.p_env = glw.addPlot(row=0, col=0)
+        self.p_sig = glw.addPlot(row=0, col=0)
+        self.p_sig.setTitle('RAW signal (centered, pre-rectify) , the envelope is abs()+smooth of THIS')
+        self.p_sig.setXRange(0, args.seconds); self.p_sig.showGrid(x=False, y=True, alpha=0.25)
+        self.p_sig.enableAutoRange(axis='y')
+        self.c_sig = self.p_sig.plot(pen=pg.mkPen('#444444', width=1))
+        self.tx_sig = np.arange(sig_ring.n) / args.fs
+
+        self.p_env = glw.addPlot(row=1, col=0)
         self.p_env.setTitle('envelope'); self.p_env.setYRange(0, args.env_max)
         self.p_env.setXRange(0, args.seconds); self.p_env.showGrid(x=False, y=True, alpha=0.25)
+        self.p_env.setXLink(self.p_sig)
         self.c_env = self.p_env.plot(pen=pg.mkPen('#e74c3c', width=2))
         self.tx_env = np.arange(env_ring.n) / args.fs
 
-        self.p_dtw = glw.addPlot(row=1, col=0)
+        self.p_dtw = glw.addPlot(row=2, col=0)
         self.p_dtw.setTitle('DTW distance per template  (lower = better match)')
         self.p_dtw.setXRange(0, args.seconds); self.p_dtw.showGrid(x=False, y=True, alpha=0.25)
         self.p_dtw.setLabel('bottom', 'seconds'); self.p_dtw.addLegend(offset=(10, 10))
-        self.p_dtw.setXLink(self.p_env)
+        self.p_dtw.setXLink(self.p_sig)
         self.curves = {}
         for i, label in enumerate(order):
             self.curves[label] = self.p_dtw.plot(
@@ -144,46 +148,11 @@ class Monitor(QtWidgets.QMainWindow):
         self.timer = QtCore.QTimer(); self.timer.timeout.connect(self.update_view)
         self.timer.start(int(1000 / args.fs_disp))
 
-    def step_fsm(self, env, vd):
-        """Event-based pulse decision (see the README / discussion)."""
-        self.fired = ''
-        self.age += 1
-        if self.age < self.warm_need:          # warm-up: let the DSP/window settle first
-            self.state = 'IDLE'
-            return
-        act_on = self.sb_acton.value(); act_off = act_on * 0.6
-        cap = self.sb_cap.value(); margin = self.sb_margin.value()
-        actions = {k: v for k, v in vd.items() if k != 'relaxed'}
-
-        if self.state == 'IDLE':
-            if env > act_on:                       # activity gate: a pulse begins
-                self.state = 'PULSE'
-                self.min_act = {k: float('inf') for k in actions}
-        elif self.state == 'PULSE':
-            for k in actions:                      # track best match reached during the pulse
-                self.min_act[k] = min(self.min_act[k], actions[k])
-            if env < act_off:                      # pulse ended -> decide
-                best = min(self.min_act, key=self.min_act.get)
-                bv = self.min_act[best]
-                others = [v for k, v in self.min_act.items() if k != best]
-                second = min(others) if others else float('inf')
-                if bv < cap and second > bv * margin:   # clear + unambiguous
-                    self.gripper = best
-                    self.fired = best
-                self.state = 'REFRACTORY'; self.reset_timer = 0; self.lock_ticks = 0
-        elif self.state == 'REFRACTORY':           # re-arm once the muscle is back to rest
-            self.lock_ticks += 1
-            locked = self.lock_ticks < int(self.sb_lockout.value() * self.args.fs_disp)
-            if not locked and env < act_off:        # envelope-return = the real relaxation (fast)
-                self.reset_timer += 1
-                if self.reset_timer >= self.reset_need:
-                    self.state = 'IDLE'
-            else:
-                self.reset_timer = 0
-
     def update_view(self):
         if self.logf.closed:
             return
+        sig_snap = self.sig_ring.snapshot()
+        self.c_sig.setData(self.tx_sig, sig_snap)   # raw centered signal , also drives the toggle
         snap = self.env_ring.snapshot()
         self.c_env.setData(self.tx_env, snap)
         env_now = float(np.mean(snap[-5:]))
@@ -199,7 +168,16 @@ class Monitor(QtWidgets.QMainWindow):
             self.dtw_hist[label].push(best)
             vd[label] = best
         vals = [vd[label] for label in self.order]
-        self.step_fsm(env_now, vd)
+
+        # --- SIMPLEST decision: toggle the gripper on a downward dip past -threshold ---
+        self.fired = ''
+        thr = self.sb_thr.value()
+        recent_min = float(sig_snap[-12:].min())   # most recent ~60 ms of the raw signal
+        if self.toggle_armed and recent_min <= -thr:
+            self.gripper = 'open' if self.gripper == 'close' else 'close'   # TOGGLE
+            self.fired = 'toggle'; self.state = 'FIRED'; self.toggle_armed = False
+        elif recent_min > -thr:                    # back above the line -> ready for the next dip
+            self.state = 'ARMED'; self.toggle_armed = True
 
         # drive the gripper when the decision changes it
         if self.gripper != self.last_sent:
@@ -211,7 +189,7 @@ class Monitor(QtWidgets.QMainWindow):
             self.last_sent = self.gripper
 
         self.csv.writerow([f'{time.time() - self.t0:.3f}'] + [f'{v:.2f}' for v in vals]
-                          + [f'{env_now:.1f}', self.state, self.gripper, self.fired])
+                          + [f'{env_now:.1f}', self.state, self.npulse, self.gripper, self.fired])
 
         for label in self.order:
             self.curves[label].setData(self.tx, self.dtw_hist[label].snapshot())
@@ -293,7 +271,7 @@ def main():
     reader = SerialReader(ser, args, sig_ring, env_ring, raw_ring); reader.start()
 
     app = QtWidgets.QApplication(sys.argv)
-    win = Monitor(args, env_ring, raw_ring, groups, order, ser); win.resize(1050, 760); win.show()
+    win = Monitor(args, sig_ring, env_ring, raw_ring, groups, order, ser, reader); win.resize(1050, 880); win.show()
     try:
         app.exec()
     finally:

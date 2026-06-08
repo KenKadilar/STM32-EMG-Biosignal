@@ -207,7 +207,12 @@ class CalibrateWindow(QtWidgets.QMainWindow):
         self.name_edit.setText(t['name'])
         self.label_combo.setCurrentText(t['label'])
         self.save_btn.setText('Save (update)')
-        self._show_trim(np.array(t['env'], dtype=float))   # re-trim the saved envelope
+        # re-trim against the FULL capture so the region can be widened, not just narrowed.
+        # legacy templates only kept the trimmed slice -> fall back to it (narrow-only).
+        full = np.array(t.get('full_env', t['env']), dtype=float)
+        self._show_trim(full)
+        trim = t.get('trim', [0, len(full)]); fs = self.args.fs
+        self.region.setRegion([trim[0] / fs, trim[1] / fs])   # restore the previous cut
 
     # ---- save / delete / edit ----
     def on_save(self):
@@ -218,17 +223,20 @@ class CalibrateWindow(QtWidgets.QMainWindow):
         if i1 - i0 < 2:
             return
         seg = [round(float(x), 2) for x in self.rec_env[i0:i1]]
+        full = [round(float(x), 2) for x in self.rec_env]   # keep the whole capture for re-trim
         label = self.label_combo.currentText().strip() or 'unnamed'
         name = self.name_edit.text().strip() or f'{label} {time.strftime("%H:%M:%S")}'
         if self.editing_id:                     # re-trim: update the existing template
             t = next((x for x in self.data['templates'] if x['id'] == self.editing_id), None)
             if t:
-                t['name'] = name; t['label'] = label; t['env'] = seg
+                t['name'] = name; t['label'] = label
+                t['env'] = seg; t['full_env'] = full; t['trim'] = [i0, i1]
             self.editing_id = None; self.save_btn.setText('Save trimmed')
         else:
             self.data['templates'].append({
                 'id': new_id(), 'name': name, 'label': label,
-                'created': time.strftime('%Y-%m-%d %H:%M:%S'), 'active': True, 'env': seg})
+                'created': time.strftime('%Y-%m-%d %H:%M:%S'), 'active': True,
+                'env': seg, 'full_env': full, 'trim': [i0, i1]})
         save_templates(self.data)
         self.name_edit.clear()
         self.refresh_table(); self.refresh_slots()
