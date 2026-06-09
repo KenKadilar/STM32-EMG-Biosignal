@@ -15,7 +15,8 @@ EMG prosthetic-hand thesis): a myoelectric gripper on real STM32 firmware. Edge-
 The board reads the muscle, does the DSP + the open/close decision ON-CHIP, drives the gripper, and
 fails safe, all standalone. The laptop is just a viewer/logger now.
 
-Firmware = a clean C++ super-loop (NOT FreeRTOS, deliberate) of header-only classes in `src/`:
+Firmware = a clean C++ super-loop of header-only classes in `src/` (a super-loop is the CURRENT
+implementation, not an RTOS , FreeRTOS is still an OPEN deliverable, see "Known deviations" below):
 - `Emg` (Emg.h): ADC on PA0; `read()` returns one 0..4095 sample.
 - `MuscleTrigger` (MuscleTrigger.h): the brain. Live baseline tracker (slow EMA, RATE 0.001),
   centering (`centered = raw - baseline`), dip detection (fire once when `centered <= -425` while
@@ -37,8 +38,9 @@ MuscleTrigger.h (Can set LOCKOUT 25 and RAIL_LOW 25 himself).
 
 ## How we got here (short)
 
-Day one an "ultracode" run autonomously built a FreeRTOS port; it was rolled back entirely (see the
-process rule above , do not repeat it). Then, one step at a time with Can: refactored the streamer
+At the start of THIS (5th) session (2026-06-09, NOT day one of the project) an "ultracode" run
+autonomously built a FreeRTOS port before Can could weigh in; it was rolled back entirely for being
+autonomous, NOT because FreeRTOS was rejected (see "Known deviations"). Then, one step at a time with Can: refactored the streamer
 into his C++ header-only-class style; CP1 ported baseline+centering on-chip (verified: rest ~0, flex
 dives to ~-693); CP2 added the on-chip dip detector + toggle + signal-loss failsafe (verified). The
 laptop decision is retired; `operate.py` remains only as a laptop toggle fallback.
@@ -72,15 +74,27 @@ laptop decision is retired; `operate.py` remains only as a laptop toggle fallbac
 
 - Build: `& "C:\Users\kadil\.platformio\penv\Scripts\pio.exe" run -d "S:\Coding\STM32-EMG-Biosignal"`.
   Flash: add `-t upload` (ST-LINK over Mini-USB). CI builds `pio run` on every push.
-- Latest commit on main: 89e50d2.
+- Latest commit: see `git log` (do not hardcode a hash here , it goes stale the next commit).
 
-## NEXT (scope steps still open , Can picks, one at a time)
+## Known deviations from the original scope (NOT approved cuts , flagged by the 2026-06-09 audit)
+
+The first chat's step list + the Able JD competency table call for these; they are NOT done. An
+earlier handoff wrongly recorded the DSP as "done" and FreeRTOS as a settled cut. They are open work,
+not closed decisions:
+- FreeRTOS / RTOS , the current loop is a super-loop; the "sample / process / comms tasks"
+  deliverable (and the JD's RTOS row) is OPEN. Can never decided to drop it.
+- DMA + timer-triggered ADC , the scope wants timer-triggered ADC + DMA; the firmware POLLS the ADC
+  once per loop (inherited from the streamer). Not flagged at the time; open.
+- CMSIS-DSP band-pass / feature extraction , on-chip processing is only a lightweight EMA baseline +
+  centering (enough for the dip detector, but it does not cover the DSP competency).
+
+## NEXT (Can picks, one at a time)
 
 - CAN (MCP2515 over SPI): broadcast gesture/telemetry; decode on the 24 MHz logic analyzer. Biggest
   remaining JD competency + best demo visual. Needs the MCP2515 module wired.
 - IWDG watchdog: reboots the chip if the code hangs (the signal-loss failsafe is already done).
+- The open competencies above (FreeRTOS, DMA+timer ADC, CMSIS-DSP) if Can wants the full JD spread.
 - Ship: README (turn a chip_log CSV into a clean graph) + demo video + CV line (STM32 / on-chip EMG / CAN).
-- Optional: revisit FreeRTOS (CV "RTOS" checkbox only; the super-loop is the right design here).
 
 ## Reference docs in this repo
 

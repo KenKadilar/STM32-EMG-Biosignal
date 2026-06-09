@@ -11,9 +11,10 @@ get his "go" -> implement -> verify on the real hardware -> next step. Do NOT ru
 build several subsystems before he weighs in, do NOT "finish the whole thing" autonomously, and do
 NOT use autonomous multi-agent / "ultracode" orchestration on his code.
 
-(Why this is rule #1: on day one an "ultracode" run autonomously built an entire FreeRTOS port
-before Can could weigh in. It had to be rolled back completely and nearly ended the session. Don't
-repeat it.)
+(Why this is rule #1: at the start of the 5th session (2026-06-09, NOT day one of the project) an
+"ultracode" run autonomously built an entire FreeRTOS port before Can could weigh in. It had to be
+rolled back completely and nearly ended the session. Don't repeat it. Note: the rollback was about
+the AUTONOMOUS method, NOT a decision to drop FreeRTOS , see "Known deviations" below.)
 
 Can is a 15-year self-taught polyglot (C, C++, C#, Java, Python, PIC, Unreal/Unity/Godot). He is
 NOT a beginner at programming logic , don't condescend. He IS often new to a specific domain's
@@ -53,27 +54,35 @@ any `*_check.py` in the temp folder (throwaway).
 ## State in one paragraph
 
 The board now does EVERYTHING on-chip and runs standalone. Firmware is a clean C++ super-loop
-(NOT FreeRTOS, deliberate) of header-only classes: Emg (ADC/PA0), MuscleTrigger (live baseline +
+(the CURRENT implementation, not an RTOS; FreeRTOS is still open, see "Known deviations") of
+header-only classes: Emg (ADC/PA0), MuscleTrigger (live baseline +
 centering + dip detection + signal-loss failsafe), Servo (PB6 PWM; open/close/toggle/ease), Comms
 (USART2; streams "raw,centered,valid"), Timer (200 Hz metronome). A flex dips the centered signal
 past -425 and toggles the gripper (one toggle per flex; bounce-guard + re-arm); pulling an
 electrode rails the signal, which the failsafe catches (gripper holds, baseline frozen, re-trusts
 after ~1 s). VERIFIED on hardware (fast wrist-flicks toggle cleanly, unplug holds, stable). The
 laptop is just a VIEWER now: `tools/emg_studio/chip_monitor.py` (live centered graph + threshold
-lines + valid banner + decimated CSV logging to logs/). Latest commit on main: 89e50d2.
+lines + valid banner + decimated CSV logging to logs/). Latest commit: see `git log`.
 
 ## SETTLED decisions , do NOT re-open
 
-- Super-loop, NOT FreeRTOS. A single-rate 200 Hz job does not need an RTOS; Can chose the clean
-  super-loop. FreeRTOS is optional later, purely as a CV "RTOS" checkbox, not a design need.
 - ONE gesture only: a single dip = toggle open/close. No DTW on the chip (the thesis owns DTW), no
   dip-counter (dropped).
 - C++ header-only classes (one main.cpp + a class per header, Can's thesis style). Not the C .h/.c split.
 - No big AI file-header banner comments. Inline comments + the single FIRMWARE_MAP.md nav doc.
 
+## Known deviations from the original scope (NOT approved cuts , flagged 2026-06-09 audit)
+
+The first chat's plan + the Able JD table list these; they are NOT done. An earlier handoff wrongly
+recorded the DSP as "done" and FreeRTOS as a settled cut. Open work, not closed decisions:
+- FreeRTOS / RTOS , current loop is a super-loop; the sample/process/comms-tasks deliverable is open.
+- DMA + timer-triggered ADC , the ADC is polled once per loop (inherited from the streamer).
+- CMSIS-DSP band-pass / features , on-chip processing is only a lightweight EMA baseline + centering.
+
 ## NEXT ACTION (Can picks; do not assume; one step at a time)
 
-The core deliverable is DONE. Remaining, highest value first:
+The core on-chip DECISION is done and verified, but the competencies above remain open. Remaining
+work, highest value first:
 - CAN (MCP2515 over SPI): broadcast the gesture/telemetry on an industrial bus. Biggest remaining JD
   competency + best demo visual (logic-analyzer CAN decode). Needs the MCP2515 module wired.
 - IWDG watchdog: reboots the chip if the code hangs (quick; complements the signal-loss failsafe).
