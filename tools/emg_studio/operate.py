@@ -172,23 +172,16 @@ class Monitor(QtWidgets.QMainWindow):
             vd[label] = best
         vals = [vd[label] for label in self.order]
 
-        # --- 1 dip = close, 2 dips = open (dip-counting on the proven raw-dip detector) ---
+        # --- TOGGLE: each dip flips the gripper open<->close (the proven raw-dip detector) ---
         self.fired = ''
         thr = self.sb_thr.value()
-        window = max(1, int(self.sb_window.value() * self.args.fs_disp))
         recent_min = float(sig_snap[-12:].min())   # most recent ~60 ms of the raw signal
         new_dip = (recent_min <= -thr) and self.dip_armed
-        self.dip_armed = recent_min > -thr          # re-arm once the signal is back above -thr
-        if self.state == 'IDLE':
-            if new_dip:                             # first dip of a gesture
-                self.npulse = 1; self.quiet = 0; self.state = 'COUNTING'
-        elif self.state == 'COUNTING':
-            self.quiet += 1
-            if new_dip:                             # another dip within the window
-                self.npulse += 1; self.quiet = 0
-            if self.quiet >= window:                # quiet long enough since last dip -> decide
-                self.gripper = 'close' if self.npulse == 1 else 'open'
-                self.fired = self.gripper; self.state = 'IDLE'
+        self.dip_armed = recent_min > -thr          # re-arm once the signal climbs back above -thr
+        if new_dip:
+            self.gripper = 'open' if self.gripper == 'close' else 'close'   # flip on each dip
+            self.fired = self.gripper
+        self.npulse = 0                             # (unused in toggle; kept for the CSV column)
 
         # drive the gripper when the decision changes it
         if self.gripper != self.last_sent:
