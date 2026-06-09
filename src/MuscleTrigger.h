@@ -3,6 +3,7 @@
 #ifndef MUSCLE_TRIGGER_H
 #define MUSCLE_TRIGGER_H
 #include "stm32f4xx_hal.h"
+#include "Notch.h"
 
 class MuscleTrigger
 {
@@ -29,7 +30,7 @@ class MuscleTrigger
         // --- track the resting baseline and center the signal ---
         if (!baselineInitialized) { baseline = raw; baselineInitialized = true; }
         baseline += RATE * ((float)raw - baseline);
-        lastCentered = (int)((float)raw - baseline);
+        lastCentered = (int)notch.filter((float)raw - baseline);   // 50 Hz notch on the AC, kills mains hum
 
         // --- dip detection: fire once per flex ---
         bool fired = false;
@@ -65,5 +66,6 @@ class MuscleTrigger
     int   samplesSinceRearm = 1000;      // loop counts since the last release/re-arm (starts past the lockout)
     int   cleanSamples = 0;              // consecutive non-bad samples (0 = distrust the signal)
     int   lastCentered = 0;              // most recent centered value
+    Notch notch;                         // 50 Hz mains-hum filter on the centered signal
 };
 #endif

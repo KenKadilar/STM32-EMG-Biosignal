@@ -87,8 +87,8 @@ not closed decisions:
   deliverable (and the JD's RTOS row) is OPEN. Can never decided to drop it.
 - DMA + timer-triggered ADC , the scope wants timer-triggered ADC + DMA; the firmware POLLS the ADC
   once per loop (inherited from the streamer). Not flagged at the time; open.
-- CMSIS-DSP band-pass / feature extraction , on-chip processing is only a lightweight EMA baseline +
-  centering (enough for the dip detector, but it does not cover the DSP competency).
+- DSP : a 50 Hz notch biquad is now on-chip (Notch.h, mains rejection, verified 2026-06-09). The
+  CMSIS-DSP *library* swap + feature extraction stay optional (the notch demonstrates the DSP box).
 
 ## NEXT (Can picks, one at a time)
 

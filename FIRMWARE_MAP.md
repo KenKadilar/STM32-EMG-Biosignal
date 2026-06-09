@@ -17,6 +17,7 @@ Build: PlatformIO (`framework = stm32cube`). Flash: `pio run -t upload`.
 | `Comms.h` | `Comms` : USB serial to the laptop (USART2). `sendStatus(raw, centered, valid)` streams telemetry as `raw,centered,valid`. (The old `S<us>` receive path is still present but unused now that the chip decides.) |
 | `Timer.h` | `Timer` : `waitForNextTick(ms)` paces the loop with no drift; `pause(ms)` is a plain blocking wait. Call `initialLoopTickStarter()` once after `HAL_Init`. |
 | `Watchdog.h` | `Watchdog` : the hardware IWDG. `pet()` once per loop; if the loop hangs and stops petting, the chip reboots itself (~2 s). |
+| `Notch.h` | `Notch` : a 50 Hz biquad notch; `filter()` on the centered signal kills mains hum (used by MuscleTrigger). |
 
 ## The loop (`main.cpp`, ~200 times a second)
 

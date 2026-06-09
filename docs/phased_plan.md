@@ -37,12 +37,13 @@ below keep the scope's labels; the checkmarks reflect actual order done.
 - [x] Read Grove EMG analog envelope (PA0 / A0)
 - [x] Serial-plot / log the raw signal; characterized noise (see docs/emg_noise_findings.md)
 
-## 3. DSP  NOT in the current firmware (the DSP JD box is OPEN, not "not needed")
+## 3. DSP  50 Hz notch DONE on-chip (Notch.h); CMSIS-DSP library swap optional
 - REMOVED: adaptive bias removal + 50 Hz notch biquad + rectify/moving-average envelope were REAL
       on-chip in the early firmware (commit a918064); the Handoff 5 rewrite (c79489f) dropped them.
       Recoverable from git toward the DSP box.
-- [~] Current super-loop does only a lightweight EMA baseline + centering (MuscleTrigger.h): enough
-      for the dip detector, but it does NOT cover the DSP competency.
+- [x] 50 Hz mains-rejection notch biquad re-derived for the 200 Hz loop (Notch.h), on the centered
+      signal in MuscleTrigger. Verified 2026-06-09: the mains-hum band collapsed to a clean line, the
+      flex dip unchanged. Plus the EMA baseline + centering. (50 Hz = fs/4 at 200 Hz: a clean 3-term biquad.)
 - [ ] CMSIS-DSP band-pass / feature extraction : OPEN. (The old "not needed, Grove filters internally"
       framing judges by gripper function; the project exists to DEMONSTRATE the DSP box for the JD,
       the same mistake that mislabeled FreeRTOS. Treat as an open competency.)
