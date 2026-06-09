@@ -3,6 +3,13 @@
 Source of truth for scope: `..\..\ChatAssistants\HealthAssistant\CareerAssistant\STM32_Project_Scope.md`.
 This file tracks status. Check items off as they land.
 
+> RECONCILED 2026-06-09 against the CURRENT firmware. This checklist was written in the early
+> streamer/bring-up era. The Handoff 5 rewrite (commit c79489f) replaced that firmware with the clean
+> super-loop and DROPPED several things this file still marked "done" (on-chip timer-ADC@1kHz, 50 Hz
+> notch, envelope). Those WERE real in the early firmware (commit a918064) and are recoverable from
+> git, but they are NOT in the current super-loop. Marks below corrected to reflect the CURRENT
+> firmware; status of record now lives in HANDOFF.md "Known deviations".
+
 Legend: [ ] not started, [~] in progress, [x] done, (HW) needs the board.
 
 Note: the build order was reordered from the scope's numbering to "working core first"
@@ -23,17 +30,23 @@ below keep the scope's labels; the checkmarks reflect actual order done.
 - [x] Blink LD2 (PA5) : confirmed ~1 Hz 2026-06-05
 - [ ] Step through with the ST-LINK debugger : optional, later
 
-## 2. EMG acquisition (HW)  DONE
-- [x] Timer-triggered ADC at 1 kHz (TIM2 ISR). DMA deferred (polling read is fine at 1 kHz).
+## 2. EMG acquisition (HW)  acquisition works (polled 200 Hz); timer-trigger + DMA OPEN
+- [~] Current super-loop POLLS the ADC once per loop at 200 Hz (Emg.h): no timer trigger, no DMA.
+- REMOVED: a timer-triggered ADC at 1 kHz (TIM2 ISR) was real in the early firmware (commit a918064);
+      the Handoff 5 rewrite dropped it. DMA was never added. Timer-trigger + DMA = OPEN (recoverable from git).
 - [x] Read Grove EMG analog envelope (PA0 / A0)
 - [x] Serial-plot / log the raw signal; characterized noise (see docs/emg_noise_findings.md)
 
-## 3. DSP  DONE (custom, no CMSIS-DSP needed)
-- [x] Adaptive bias removal (live DC tracking, not hardcoded)
-- [x] 50 Hz notch biquad (mains rejection on the linear signal)
-- [x] Rectify + moving-average envelope on-device
-- [ ] CMSIS-DSP : NOT needed (Grove filters internally; custom pipeline suffices)
-- [ ] Feature extraction (RMS/MAV/ZC/WL) : only if DTW needs it
+## 3. DSP  NOT in the current firmware (the DSP JD box is OPEN, not "not needed")
+- REMOVED: adaptive bias removal + 50 Hz notch biquad + rectify/moving-average envelope were REAL
+      on-chip in the early firmware (commit a918064); the Handoff 5 rewrite (c79489f) dropped them.
+      Recoverable from git toward the DSP box.
+- [~] Current super-loop does only a lightweight EMA baseline + centering (MuscleTrigger.h): enough
+      for the dip detector, but it does NOT cover the DSP competency.
+- [ ] CMSIS-DSP band-pass / feature extraction : OPEN. (The old "not needed, Grove filters internally"
+      framing judges by gripper function; the project exists to DEMONSTRATE the DSP box for the JD,
+      the same mistake that mislabeled FreeRTOS. Treat as an open competency.)
+- [ ] Feature extraction (RMS/MAV/ZC/WL) : open, ties into the DSP box above.
 
 ## 4. Classification
 - [ ] Port thesis DTW (2 templates: open / close) + calibration
@@ -52,13 +65,14 @@ below keep the scope's labels; the checkmarks reflect actual order done.
 - [ ] Decode frames on the 24 MHz logic analyzer (PulseView CAN decoder)
 - [ ] Optional: SN65HVD230 on native bxCAN as a 2nd node
 
-## 7. Safety  partly done early
-- [x] Signal-fault detection (clip / over-amplitude / bias out of range) + LD2 warning +
-      auto raw-capture; validated against induced faults (see emg_noise_findings.md)
-- [ ] IWDG watchdog
-- [ ] Wire the fault state into a motor-off failsafe (once EMG drives the servo)
+## 7. Safety  done
+- [x] Signal-loss failsafe in the CURRENT firmware (MuscleTrigger.h): railing/unplugged input ->
+      gripper holds + baseline frozen, re-trusts after ~1 s clean. (The early health-monitor firmware's
+      LD2 warning + auto raw-capture, commit c643855, are NOT in the current super-loop.)
+- [x] IWDG watchdog : ~2 s timeout, petted once per loop (Watchdog.h). Verified 2026-06-09 by a
+      deliberate hang test (board auto-rebooted out of a forced infinite loop).
 
-## 1. FreeRTOS  (after the working core)
+## 1. FreeRTOS  (OPEN deliverable, never dropped; the super-loop is only the current implementation)
 - [ ] Add FreeRTOS (kernel via middleware or lib_deps)
 - [ ] Tasks: sampler / processor / comms + queues
 - [ ] Refactor the working super-loop into tasks

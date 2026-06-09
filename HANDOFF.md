@@ -12,8 +12,8 @@ EMG prosthetic-hand thesis): a myoelectric gripper on real STM32 firmware. Edge-
 
 ## STATE: on-chip, standalone, VERIFIED (2026-06-09)
 
-The board reads the muscle, does the DSP + the open/close decision ON-CHIP, drives the gripper, and
-fails safe, all standalone. The laptop is just a viewer/logger now.
+The board reads the muscle, does the live signal-centering + the open/close decision ON-CHIP, drives the gripper, and
+fails safe, and reboots itself if the code hangs (IWDG watchdog), all standalone. The laptop is just a viewer/logger now.
 
 Firmware = a clean C++ super-loop of header-only classes in `src/` (a super-loop is the CURRENT
 implementation, not an RTOS , FreeRTOS is still an OPEN deliverable, see "Known deviations" below):
@@ -28,6 +28,8 @@ implementation, not an RTOS , FreeRTOS is still an OPEN deliverable, see "Known 
 - `Comms` (Comms.h): USART2 (USB VCP); `sendStatus()` streams "raw,centered,valid". (The old
   `S<us>` receive path is present but unused now the chip decides; candidate for a cleanup pass.)
 - `Timer` (Timer.h): `waitForNextTick(5)` = drift-free 200 Hz; `pause(ms)` = blocking delay.
+- `Watchdog` (Watchdog.h): hardware IWDG, ~2 s. `pet()` each loop; if the loop hangs and stops petting, the
+  chip auto-reboots. Verified 2026-06-09 by a deliberate hang test.
 - `main.cpp`: make the objects, then loop {read -> trigger.update -> on a dip servo.toggle ->
   servo.ease -> comms.sendStatus -> timer.waitForNextTick(5)}, plus the SysTick + USART2 handlers.
 
@@ -92,7 +94,7 @@ not closed decisions:
 
 - CAN (MCP2515 over SPI): broadcast gesture/telemetry; decode on the 24 MHz logic analyzer. Biggest
   remaining JD competency + best demo visual. Needs the MCP2515 module wired.
-- IWDG watchdog: reboots the chip if the code hangs (the signal-loss failsafe is already done).
+- IWDG watchdog: DONE 2026-06-09 (Watchdog.h, ~2 s; verified by a deliberate hang test). Both safety halves now in: signal-loss failsafe (bad input) + watchdog (dead code).
 - The open competencies above (FreeRTOS, DMA+timer ADC, CMSIS-DSP) if Can wants the full JD spread.
 - Ship: README (turn a chip_log CSV into a clean graph) + demo video + CV line (STM32 / on-chip EMG / CAN).
 

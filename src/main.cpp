@@ -5,6 +5,7 @@
 #include "Comms.h"
 #include "Timer.h"
 #include "MuscleTrigger.h"
+#include "Watchdog.h"
 
 // the parts, as global objects (built cheaply here; real setup happens in init()/the starter)
 static Emg           emg;
@@ -12,6 +13,7 @@ static Servo         servo;
 static Comms         comms;
 static Timer         timer;
 static MuscleTrigger trigger;
+static Watchdog      watchdog;
 
 static uint16_t raw;        // latest muscle sample (0..4095)
 static int      centered;   // latest centered value (raw minus the live baseline)
@@ -23,6 +25,7 @@ int main(void)
     servo.init();
     comms.init();
     timer.initialLoopTickStarter();   // start the loop timer now that HAL's clock is running
+    watchdog.init();                  // arm the watchdog LAST, just before the loop starts petting it
 
     while (1)
     {
@@ -34,6 +37,7 @@ int main(void)
         comms.sendStatus(raw, centered, trigger.isValid());      // raw, centered, signal-valid flag
 
         timer.waitForNextTick(5);                      // do the work, then wait out the rest of the 5 ms
+        watchdog.pet();                                // a healthy iteration finished: reset the ~2 s countdown
     }
 }
 

@@ -16,6 +16,7 @@ Build: PlatformIO (`framework = stm32cube`). Flash: `pio run -t upload`.
 | `Servo.h` | `Servo` : the gripper. PWM on PB6 (TIM4 channel 1). `open()`/`close()`/`toggle()` choose a position; `ease()` (every loop) glides toward it, never slamming; `setRotationSpeed()` sets the step size. |
 | `Comms.h` | `Comms` : USB serial to the laptop (USART2). `sendStatus(raw, centered, valid)` streams telemetry as `raw,centered,valid`. (The old `S<us>` receive path is still present but unused now that the chip decides.) |
 | `Timer.h` | `Timer` : `waitForNextTick(ms)` paces the loop with no drift; `pause(ms)` is a plain blocking wait. Call `initialLoopTickStarter()` once after `HAL_Init`. |
+| `Watchdog.h` | `Watchdog` : the hardware IWDG. `pet()` once per loop; if the loop hangs and stops petting, the chip reboots itself (~2 s). |
 
 ## The loop (`main.cpp`, ~200 times a second)
 
@@ -25,6 +26,7 @@ Build: PlatformIO (`framework = stm32cube`). Flash: `pio run -t upload`.
 4. `servo.ease()` : glide one step toward the target.
 5. `comms.sendStatus(raw, centered, trigger.isValid())` : stream telemetry for monitoring.
 6. `timer.waitForNextTick(5)` : hold the 200 Hz rate.
+7. `watchdog.pet()` : reset the ~2 s watchdog; if the loop ever hangs and skips this, the chip reboots itself.
 
 The two interrupt handlers at the bottom of `main.cpp`: `SysTick_Handler` keeps the HAL millisecond
 clock; `USART2_IRQHandler` feeds each byte to `comms.onByteReceived()` (the now-unused receive path).
