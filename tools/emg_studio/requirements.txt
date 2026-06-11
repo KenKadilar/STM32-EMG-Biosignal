@@ -1,0 +1,7 @@
+# Python deps for the emg_studio laptop tools (chip_monitor.py is the current on-chip viewer).
+# Install into whatever Python you run the tools with:
+#   python -m pip install -r requirements.txt
+numpy
+pyserial
+PyQt6
+pyqtgraph
