@@ -1,7 +1,8 @@
-// main.cpp : B2 , the EMG work split into tasks: servoTask (~200 Hz actuation) + commsTask (~50 Hz telemetry) + watchdogTask. The 1 kHz brain stays in the DMA callback. Priorities get tuned in Step C. File map: FIRMWARE_MAP.md
+// main.cpp : B2 + queue , servoTask (~200 Hz) + commsTask (~50 Hz) + watchdogTask. The brain hands each flex to servoTask through a FreeRTOS queue. The 1 kHz brain stays in the DMA callback. File map: FIRMWARE_MAP.md
 #include "stm32f4xx_hal.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
 #include "Emg.h"
 #include "Servo.h"
 #include "Comms.h"
@@ -17,17 +18,23 @@ static Comms         comms;
 static MuscleTrigger trigger;
 static Watchdog      watchdog;
 
-static volatile bool toggleRequested = false;   // the 1 kHz brain sets this; servoTask acts on it
+// The brain (DMA ISR) drops one token in here per valid flex; servoTask waits on it. This replaces the
+// old volatile flag: a queue is the safe ISR->task hand-off, it does the locking, so no manual volatile.
+static QueueHandle_t mailBox;
 
-// servoTask : the time-critical actuation. ~200 Hz so the gripper eases smoothly.
+// servoTask : highest priority. Waits on the flex queue, toggles on a flex, eases every cycle.
 static void servoTask(void *params)
 {
     (void)params;
+    uint8_t token;
     while (1)
     {
-        if (toggleRequested) { servo.toggle(); toggleRequested = false; }   // the brain flagged a flex
-        servo.ease();                                                       // glide toward the target
-        vTaskDelay(pdMS_TO_TICKS(5));                                       // ~200 Hz
+        // block up to 5 ms for a flex; the timeout doubles as the ~200 Hz pacing (replaces vTaskDelay)
+        if (xQueueReceive(mailBox, &token, pdMS_TO_TICKS(5)) == pdTRUE)
+        {
+            servo.toggle();   // a flex arrived
+        }
+        servo.ease();         // glide toward the target every cycle
     }
 }
 
@@ -37,15 +44,15 @@ static void commsTask(void *params)
     (void)params;
     while (1)
     {
-        uint16_t raw      = emg.read();                          // freshest sample
-        int      centered = trigger.centered();                  // latest centered value from the brain
-        comms.sendStatus(raw, centered, trigger.isValid());      // stream raw,centered,valid
-        vTaskDelay(pdMS_TO_TICKS(20));                           // ~50 Hz
+        uint16_t raw      = emg.read();
+        int      centered = trigger.centered();
+        comms.sendStatus(raw, centered, trigger.isValid());
+        vTaskDelay(pdMS_TO_TICKS(20));   // ~50 Hz
     }
 }
 
-// watchdogTask : keep the IWDG fed. Petting every 500 ms is well inside the ~2 s timeout.
-// Step C drops this to the LOWEST priority, so a hung higher task starves it -> the chip reboots.
+// watchdogTask : lowest priority. Pets the IWDG every 500 ms (well inside the ~2 s timeout). Being lowest
+// IS the safety: if a higher task hangs and never yields, this never runs -> never pets -> the chip reboots.
 static void watchdogTask(void *params)
 {
     (void)params;
@@ -62,12 +69,15 @@ int main(void)
     emg.init();
     servo.init();
     comms.init();
-    watchdog.init();     // arm the IWDG; watchdogTask now feeds it
+    watchdog.init();     // arm the IWDG; watchdogTask feeds it
 
-    // all priority 1 for now; Step C sets the real priorities (servo high, comms mid, watchdog lowest)
-    xTaskCreate(servoTask,    "servo",    256, nullptr, 1, nullptr);
-    xTaskCreate(commsTask,    "comms",    512, nullptr, 1, nullptr);   // 512 words: sendStatus formats a string
-    xTaskCreate(watchdogTask, "watchdog", 128, nullptr, 1, nullptr);
+    mailBox = xQueueCreate(4, sizeof(uint8_t));   // up to 4 pending flexes, 1 byte each
+    configASSERT(mailBox != NULL);                // out of heap -> stop here so it's obvious
+
+    // priorities (higher = more urgent; idle is 0): servo preempts comms preempts watchdog.
+    xTaskCreate(servoTask,    "servo",    256, nullptr, 3, nullptr);   // highest: actuation must not be delayed
+    xTaskCreate(commsTask,    "comms",    512, nullptr, 2, nullptr);   // middle: telemetry can wait for the servo
+    xTaskCreate(watchdogTask, "watchdog", 128, nullptr, 1, nullptr);   // lowest: starved if anything above hangs
     vTaskStartScheduler();                                             // hand the CPU to the kernel; does NOT return
 
     while (1) { }        // only reached if the scheduler could not start
@@ -80,5 +90,18 @@ extern "C" void SysTick_Handler(void)
     if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED) { xPortSysTickHandler(); }
 }
 extern "C" void USART2_IRQHandler(void)  { comms.onByteReceived(); }
-extern "C" void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *h) { if (trigger.update(emg.read())) toggleRequested = true; }
-extern "C" void DMA2_Stream0_IRQHandler(void)                  { emg.handleDmaIrq(); }
+
+// The 1 kHz brain. On a valid flex, hand a token to servoTask via the queue, then yield so the higher-
+// priority servoTask runs the instant this ISR exits. The DMA interrupt is priority 5 (the syscall
+// ceiling), so calling xQueueSendFromISR from here is allowed.
+extern "C" void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *h)
+{
+    if (trigger.update(emg.read()))
+    {
+        uint8_t token = 1;
+        BaseType_t higherPriorityTaskWoken = pdFALSE;
+        xQueueSendFromISR(mailBox, &token, &higherPriorityTaskWoken);
+        portYIELD_FROM_ISR(higherPriorityTaskWoken);
+    }
+}
+extern "C" void DMA2_Stream0_IRQHandler(void) { emg.handleDmaIrq(); }
