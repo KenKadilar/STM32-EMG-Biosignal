@@ -1,104 +1,128 @@
-# Paste this whole file into the next chat (STM32 EMG project, chat 6)
+# Paste this whole file into the next chat (STM32 EMG project, chat 8)
 
 You are continuing Can Kadilar's STM32 EMG-gripper project. STOP and read the files below BEFORE
-writing or running anything. There are ~200 unrelated "handoff"/"HANDOFF.md" files across this
-coding space, so use these EXACT ABSOLUTE PATHS, never search by filename.
+writing or running anything. There are ~200 unrelated "handoff"/"HANDOFF.md" files across this coding
+space, so use the EXACT ABSOLUTE PATHS below, never search by filename.
 
-## HOW TO WORK WITH CAN (read this FIRST , it is the #1 rule)
+## RULE #1 , HOW TO WORK WITH CAN (read this first)
 
-Go ONE STEP AT A TIME. For each step: propose it -> explain it in plain language -> discuss ->
-get his "go" -> implement -> verify on the real hardware -> next step. Do NOT run ahead, do NOT
-build several subsystems before he weighs in, do NOT "finish the whole thing" autonomously, and do
-NOT use autonomous multi-agent / "ultracode" orchestration on his code.
+Go ONE STEP AT A TIME: propose -> explain in plain language -> discuss -> get his "go" -> implement ->
+verify on the real hardware -> next step. Do NOT run ahead, do NOT build several subsystems before he
+weighs in, and do NOT use autonomous multi-agent / "ultracode" on his code. (At the start of the 5th
+session an "ultracode" run autonomously built a FreeRTOS port; it had to be rolled back entirely and
+nearly ended the session. Do not repeat it.)
 
-(Why this is rule #1: at the start of the 5th session (2026-06-09, NOT day one of the project) an
-"ultracode" run autonomously built an entire FreeRTOS port before Can could weigh in. It had to be
-rolled back completely and nearly ended the session. Don't repeat it. Note: the rollback was about
-the AUTONOMOUS method, NOT a decision to drop FreeRTOS , see "Known deviations" below.)
+Can is a 15-year self-taught polyglot (C, C++, C#, Java, Python, PIC, Unreal/Unity/Godot). He is NOT a
+beginner at programming logic , don't condescend. He IS often new to STM32 HAL / bare-metal jargon ,
+decode acronyms plainly the first time (RX/TX, HAL, PWM, ADC, ISR, DMA, FPU, RTOS, SPI, MOSI/MISO).
+He learns by discussion and edits the code himself; slower-but-understood beats fast-but-opaque every
+time. He bridges well to game-engine / UE5 / Godot analogies. He will ask the SAME thing several ways
+until it clicks, that's his method, not a problem, answer each angle fresh. Style: `while(1)` over
+`for(;;)`; camelCase; explicit names; no big AI banner comments (one-line top comment max + the single
+FIRMWARE_MAP.md nav doc). NO em-dashes or en-dashes in anything Can-facing (commas/colons/parens/hyphens).
 
-Can is a 15-year self-taught polyglot (C, C++, C#, Java, Python, PIC, Unreal/Unity/Godot). He is
-NOT a beginner at programming logic , don't condescend. He IS often new to a specific domain's
-jargon (STM32 HAL, bare-metal embedded) , decode acronyms plainly the first time (RX/TX, HAL, PWM,
-ADC, ISR). He learns by discussion and edits the code himself. Full guidance is in the style
-playbook (location 3 below) , read it before doing anything.
+## RULE #2 , AUDIT BEFORE YOU TRUST (this is why past handoffs kept breaking)
 
-## The locations (read in this order) , and what each one IS
+Earlier chats corrupted the plan by trusting the previous handoff instead of the code. Do not repeat:
+- The FIRST chat is the source of truth: `STM32_project_goals.md` "Initial handoff" (the 0-9 step list)
+  + the JD competency table in `STM32_Project_Scope.md`. Compare everything to THAT.
+- Trust NO "done / settled" claim (including in THIS handoff) until you verify it against `git log` +
+  the actual files. Read the code, not just the prose.
+- Specific things to verify for chat 8:
+  - FreeRTOS is genuinely DONE: commits a537fc2 / 400899e / 54f421b, and `src/main.cpp` has three tasks
+    + an `xQueueCreate(mailBox)` + `vTaskStartScheduler()`. (Earlier chats once wrongly recorded
+    FreeRTOS as "killed", it was never killed; it is now actually built and on hardware.)
+  - The hard-float build wiring is LOAD-BEARING, not clutter: `platformio.ini` `build_flags`
+    (-mfpu/-mfloat-abi=hard) AND `fpu_link.py` (the link half). If you "simplify" either, the link dies
+    ("uses VFP register arguments, firmware.elf does not"). 4 failed attempts mapped this; don't redo it.
+  - **Do NOT conflate "CAN hardware validated" with "STM32 CAN done."** The two MCP2515 modules + the
+    logic analyzer were proven on an Arduino bench (`S:\Coding\CAN_test`). The STM32 CAN firmware is NOT
+    written yet, that's the open work.
+- If you find a contradiction, FLAG it to Can; do not silently inherit it.
+
+## The locations (read in this order)
 
 1. GOAL , `S:\Coding\ChatAssistants\HealthAssistant\CareerAssistant\STM32_project_goals.md`
-   The "why are we doing this" anchor + the running handoff log. Read the LATEST "## Handoff 5"
-   section last , it is the most current. When YOU hand off, append a new "## Handoff N (date)"
-   here (do not edit earlier sections).
+   Why we're doing this + the running handoff log. Read the LATEST "## Handoff 7" section last , most
+   current. When YOU hand off, append "## Handoff 8 (date)"; do NOT edit earlier sections.
 2. SCOPE , `S:\Coding\ChatAssistants\HealthAssistant\CareerAssistant\STM32_Project_Scope.md`
-   Parts list, phased plan, and the mapping to the Able Innovations "Embedded Systems Developer" JD
-   that this project is reverse-engineered from.
-3. STYLE , `S:\Coding\CodingPlaybooks\CODING_STYLE_PLAYBOOK.md`
-   How Can codes and how to pace a session with him. This is the cross-project hub
-   (`S:\Coding\CodingPlaybooks\`); `CODING_CONVENTIONS.md` next to it is for his Python apps, not
-   this firmware. READ THE STYLE DOC before touching code.
-4. BUILD STATE , `S:\Coding\STM32-EMG-Biosignal\HANDOFF.md`
-   The current firmware/architecture/tools state (this repo's build handoff).
-5. NAV , `S:\Coding\STM32-EMG-Biosignal\FIRMWARE_MAP.md`
-   What each source file in `src/` is, plus the detector's tunable knobs.
-6. REFERENCE ONLY , `S:\Coding\PublicRepos\Prosthetic-Hand-Single-EMG-Multi-Pattern\README.md`
-   Can's published M.Sc. thesis (the prior work this rebuilds, and where his C++ header-only-class
-   style comes from). Do not edit it.
+   Parts, phased plan, and the Able Innovations "Embedded Systems Developer" JD this reverse-engineers.
+3. STYLE , `S:\Coding\CodingPlaybooks\CODING_STYLE_PLAYBOOK.md` , how Can codes + how to pace a session
+   (incl. the "teaching abstract systems concepts" notes added 2026-06-11).
+4. BUILD STATE , `S:\Coding\STM32-EMG-Biosignal\HANDOFF.md` , current firmware/architecture/tools.
+5. NAV , `S:\Coding\STM32-EMG-Biosignal\FIRMWARE_MAP.md` , each src file + FreeRTOS task/queue layout + knobs.
+6. WIRING , `S:\Coding\STM32-EMG-Biosignal\docs\wiring.md` , pin plan incl. the MCP2515/SPI2 CAN wiring.
+7. REFERENCE ONLY , `S:\Coding\PublicRepos\Prosthetic-Hand-Single-EMG-Multi-Pattern\README.md` , Can's
+   published M.Sc. thesis (the prior work this rebuilds). Do not edit.
 
 ## The repo
 
-`S:\Coding\STM32-EMG-Biosignal` (CanGitArchive/STM32-EMG-Biosignal, private, `gh` authed). Firmware
-= `src/` (C++ header-only classes). Laptop tools = `tools/emg_studio/`. This is a SEPARATE repo
-under `S:\Coding`; it is not the folder a chat may open by default, so point yourself at it.
-Ignore: `C:\Users\kadil\.platformio\...` (only touched during the rolled-back ultracode recon) and
-any `*_check.py` in the temp folder (throwaway).
+`S:\Coding\STM32-EMG-Biosignal` (CanGitArchive/STM32-EMG-Biosignal, private, `gh` authed). Firmware =
+`src/` (C++ header-only classes) + `lib/FreeRTOS/` (kernel). Config = `include/FreeRTOSConfig.h`,
+`platformio.ini`, `fpu_link.py`. Laptop tools = `tools/emg_studio/`. Latest commit on main: 54f421b
+(VERIFY with `git log`; do not trust this hash blindly).
 
-## State in one paragraph
+## State in one paragraph (VERIFY against the code)
 
-The board now does EVERYTHING on-chip and runs standalone. Firmware is a clean C++ super-loop
-(the CURRENT implementation, not an RTOS; FreeRTOS is still open, see "Known deviations") of
-header-only classes: Emg (ADC/PA0), MuscleTrigger (live baseline +
-centering + dip detection + signal-loss failsafe), Servo (PB6 PWM; open/close/toggle/ease), Comms
-(USART2; streams "raw,centered,valid"), Timer (200 Hz metronome). A flex dips the centered signal
-past -425 and toggles the gripper (one toggle per flex; bounce-guard + re-arm); pulling an
-electrode rails the signal, which the failsafe catches (gripper holds, baseline frozen, re-trusts
-after ~1 s). VERIFIED on hardware (fast wrist-flicks toggle cleanly, unplug holds, stable). The
-laptop is just a VIEWER now: `tools/emg_studio/chip_monitor.py` (live centered graph + threshold
-lines + valid banner + decimated CSV logging to logs/). Latest commit: see `git log`.
+Standalone on-chip myoelectric gripper on real STM32 firmware, now running under FreeRTOS. Acquisition
+is hardware (TIM2 -> ADC -> DMA at 1 kHz, `Emg.h`). The brain (baseline + centering + 50 Hz notch + dip
+detection, `MuscleTrigger.h` + `Notch.h`) runs at 1 kHz in `HAL_ADC_ConvCpltCallback`; on a flex it
+`xQueueSendFromISR`s a token into the `mailBox` queue + `portYIELD_FROM_ISR`s. Three tasks: `servoTask`
+(pri 3, blocks on the queue w/ a 5 ms timeout that also paces it, toggles + eases), `commsTask` (pri 2,
+~50 Hz telemetry), `watchdogTask` (pri 1 = lowest, pets the IWDG, so a hung higher task -> reboot).
+SysTick feeds both HAL and the kernel. VERIFIED on hardware. CAN hardware (2x MCP2515 + analyzer)
+validated on an Arduino bench; STM32 CAN code not written yet.
+
+## DONE (verify) vs OPEN
+
+DONE + committed + on hardware: toolchain, part bring-up, on-chip dip classifier, servo control, 50 Hz
+notch (DSP), timer+DMA sensing, signal-loss failsafe + IWDG, **FreeRTOS (3 tasks + mailBox queue +
+watchdog-starvation reboot)**, Git/CI. CAN **hardware** validated on the bench (`S:\Coding\CAN_test`).
+OPEN: **CAN STM32 firmware** (the code, NEXT), Ship (README + demo video + CV line). CMSIS-DSP library
+swap optional (the notch already shows the DSP box).
 
 ## SETTLED decisions , do NOT re-open
 
-- ONE gesture only: a single dip = toggle open/close. No DTW on the chip (the thesis owns DTW), no
-  dip-counter (dropped).
-- C++ header-only classes (one main.cpp + a class per header, Can's thesis style). Not the C .h/.c split.
-- No big AI file-header banner comments. Inline comments + the single FIRMWARE_MAP.md nav doc.
+- ONE gesture only: a single dip = toggle open/close. No DTW on the chip (the thesis owns DTW).
+- C++ header-only classes (one `main.cpp` + a class per header). No big AI banner comments.
+- FreeRTOS is DONE and KEPT (3 tasks + queue). The working super-loop fallback is in git history (71af159).
+- The hard-float build wiring (platformio.ini build_flags + fpu_link.py) is required; do not remove.
 
-## Known deviations from the original scope (NOT approved cuts , flagged 2026-06-09 audit)
+## NEXT ACTION , STM32 CAN firmware (the last JD box). CAN hardware is already validated.
 
-The first chat's plan + the Able JD table list these; they are NOT done. An earlier handoff wrongly
-recorded the DSP as "done" and FreeRTOS as a settled cut. Open work, not closed decisions:
-- FreeRTOS / RTOS , current loop is a super-loop; the sample/process/comms-tasks deliverable is open.
-- DMA + timer-triggered ADC , the ADC is polled once per loop (inherited from the streamer).
-- CMSIS-DSP band-pass / features , on-chip processing is only a lightweight EMA baseline + centering.
+Write a minimal MCP2515-over-SPI driver on the F446 and broadcast the gesture/telemetry as CAN frames,
+then decode them on the logic analyzer (same PulseView workflow). The Arduino bench already proved the
+two modules, the 8 MHz crystal, 500 kbps, and the analyzer, so ANY failure here is firmware, not hardware.
+- Wiring plan (docs/wiring.md): MCP2515 on **SPI2** , PB13 SCK / PB14 MISO / PB15 MOSI / PB12 CS /
+  PA9 INT. 5 V + GND to the module.
+- There is NO mature STM32 MCP2515 HAL library. Port/write a small register-level driver (init, set
+  bitrate for an 8 MHz crystal @ 500 kbps to match the bench, send a frame). Keep it in Can's
+  header-only-class style (e.g. a `Can.h`). One step at a time; he'll want to understand the SPI
+  register dance.
+- Then a `canTask` (or fold into commsTask) broadcasts the detected gesture / telemetry. Decode the
+  STM32's frames on the analyzer to confirm (the bench `.sr`/`.pvs`/screenshot in `docs/` show the
+  target).
+- Reuse the bench: `S:\Coding\CAN_test` (Arduino) is a known-good second CAN node if you want a real
+  STM32 -> Arduino send/receive exchange, not just an analyzer decode.
 
-## NEXT ACTION (Can picks; do not assume; one step at a time)
-
-The core on-chip DECISION is done and verified, but the competencies above remain open. Remaining
-work, highest value first:
-- CAN (MCP2515 over SPI): broadcast the gesture/telemetry on an industrial bus. Biggest remaining JD
-  competency + best demo visual (logic-analyzer CAN decode). Needs the MCP2515 module wired.
-- IWDG watchdog: reboots the chip if the code hangs (quick; complements the signal-loss failsafe).
-- Ship: README (turn a chip_log CSV into a clean graph) + demo video + add the STM32/CAN line to the CV.
-Ask Can which one.
+After CAN: Ship , README (scope + results + wiring + the docs/Logic_Analyzer_CAN_Comms.png), short demo
+video, add `STM32 / FreeRTOS / CAN` to the CV's embedded line.
 
 ## Build / flash / verify
 
 - Build: `& "C:\Users\kadil\.platformio\penv\Scripts\pio.exe" run -d "S:\Coding\STM32-EMG-Biosignal"`
-  (pio is NOT on PATH). Flash: add `-t upload` (ST-LINK over Mini-USB).
-- Verify on hardware (Can has it wired): flash, then `python tools/emg_studio/chip_monitor.py --port COM6`
-  to watch + log. Close other COM users first.
+  (pio is NOT on PATH; use the PowerShell `&` operator). Flash: add `-t upload` (ST-LINK over Mini-USB).
+- Verify on hardware: flash, then `python tools\emg_studio\chip_monitor.py --port COM6` , run it with
+  **Python 3.12** (it has numpy/pyserial/PyQt6/pyqtgraph; the auto-installed Python 3.14 does not).
+- Logic analyzer: it's an fx2lafw clone needing a one-time Zadig WinUSB swap (zadig.exe at
+  `C:\Program Files (x86)\sigrok\PulseView\`); then PulseView sees it. Already done this session.
+- Commit: `git commit -m "subject" -m "body"` (NOT a piped here-string , it once injected a BOM into a
+  commit title). Commit only when Can asks.
 
 ## HARD RULES
 
-- No em-dashes or en-dashes in any Can-facing or public text (use commas, colons, parentheses, hyphens).
-- One step at a time; no autonomous multi-agent / ultracode (see the top).
-- When you hand off, append a "## Handoff N (date)" to STM32_project_goals.md (do not edit earlier
-  sections) and refresh this file + HANDOFF.md.
+- No em-dashes or en-dashes in any Can-facing or public text (commas, colons, parentheses, hyphens).
+- One step at a time; no autonomous multi-agent / ultracode (see Rule #1).
+- When you hand off: append "## Handoff 8 (date)" to `STM32_project_goals.md` (do not edit earlier
+  sections), refresh THIS file + `HANDOFF.md` + `FIRMWARE_MAP.md`, and keep the AUDIT section (Rule #2)
+  so chat 9 starts skeptical too.
