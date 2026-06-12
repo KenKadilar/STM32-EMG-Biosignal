@@ -51,6 +51,16 @@ class Mcp2515CanBus
         HAL_Delay(10);                               // let the reset settle before any more SPI
     }
 
+    // Write one register: clock out [WRITE, address, value] in one CS-low...CS-high. The chip has no
+    // reply for a write, so this is a plain transmit (no dummy byte, nothing to read back here).
+    void writeRegister(uint8_t address, uint8_t value)
+    {
+        uint8_t toSend[3] = { CMD_WRITE, address, value };
+        select();
+        HAL_SPI_Transmit(&hspi, toSend, 3, 100);
+        deselect();
+    }
+
     // Read one register: clock out [READ, address, dummy]; the chip clocks the value back during the 3rd byte.
     uint8_t readRegister(uint8_t address)
     {
@@ -64,6 +74,22 @@ class Mcp2515CanBus
 
     uint8_t readCanstat() { return readRegister(REG_CANSTAT); }   // 0x80 right after reset = "Configuration mode"
 
+    // Set the wire speed (8 MHz crystal @ 500 kbps). Every node on a CAN bus MUST agree on this exactly,
+    // or they can't decode each other. Writable only while in Configuration mode (i.e. right after reset).
+    void setBitTiming8MHz500k()
+    {
+        writeRegister(REG_CNF1, CNF1_8MHZ_500K);
+        writeRegister(REG_CNF2, CNF2_8MHZ_500K);
+        writeRegister(REG_CNF3, CNF3_8MHZ_500K);
+    }
+
+    // Leave Configuration mode and go live: REQOP = 000 in CANCTRL = Normal mode. After this the chip
+    // participates on the bus, and CANSTAT's mode bits read 000 (so CANSTAT = 0x00).
+    void enterNormalMode()
+    {
+        writeRegister(REG_CANCTRL, 0x00);   // 0x00: Normal mode, one-shot off, CLKOUT off
+    }
+
   private:
     void select()   { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET); }   // CS LOW  = start talking
     void deselect() { HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);   }   // CS HIGH = done talking
@@ -71,7 +97,18 @@ class Mcp2515CanBus
     // MCP2515 SPI command bytes + the one register we read in step 1 (from the chip's datasheet).
     static const uint8_t CMD_RESET  = 0xC0;   // reset the whole chip to a known state
     static const uint8_t CMD_READ   = 0x03;   // "read register at the address that follows"
-    static const uint8_t REG_CANSTAT = 0x0E;  // status register; top 3 bits = operating mode
+    static const uint8_t CMD_WRITE  = 0x02;   // "write the value that follows to the address that follows"
+    static const uint8_t REG_CANSTAT = 0x0E;  // status register; top 3 bits = current operating mode
+    static const uint8_t REG_CANCTRL = 0x0F;  // control register; top 3 bits = REQUESTED operating mode
+    static const uint8_t REG_CNF3    = 0x28;  // bit-timing config 3
+    static const uint8_t REG_CNF2    = 0x29;  // bit-timing config 2
+    static const uint8_t REG_CNF1    = 0x2A;  // bit-timing config 1
+
+    // Bit timing for an 8 MHz crystal @ 500 kbps. These exact bytes are the ones the Arduino bench used
+    // (coryjfowler MCP_CAN), so the STM32 node and the Arduino node agree on the wire speed.
+    static const uint8_t CNF1_8MHZ_500K = 0x00;
+    static const uint8_t CNF2_8MHZ_500K = 0x90;
+    static const uint8_t CNF3_8MHZ_500K = 0x82;
 
     SPI_HandleTypeDef hspi = {};
 };

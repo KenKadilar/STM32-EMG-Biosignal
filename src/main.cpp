@@ -73,24 +73,27 @@ int main(void)
     servo.init();
     comms.init();
 
-    // --- STEP 1 PROBE (temporary scaffolding; delete once CAN bring-up is verified) -------------------
-    // Can we even talk to the MCP2515? Reset it, then read CANSTAT once a second and print it. Expect
-    // 0x80 = Configuration mode = SPI + wiring + CS all good. This loop never returns, so the normal
-    // FreeRTOS firmware below stays paused while we test CAN in isolation (watchdog not armed yet).
+    // --- STEP 2b PROBE (temporary scaffolding; delete once CAN bring-up is verified) ------------------
+    // Set the wire speed (8 MHz @ 500 kbps) and switch the chip from Configuration mode to Normal mode,
+    // then read CANSTAT to confirm the switch took. Mode bits 000 = Normal, so CANSTAT should be 0x00
+    // (it was 0x80 in config mode). Still no CAN bus wires. Loop never returns (FreeRTOS firmware paused).
     canBus.init();
     canBus.reset();
+    canBus.setBitTiming8MHz500k();   // must match the Arduino bench, or the two nodes can't talk later
+    canBus.enterNormalMode();        // go live
     while (1)
     {
         uint8_t canstat = canBus.readCanstat();
+        uint8_t mode    = canstat & 0xE0;   // keep only the top 3 bits (the operating-mode field)
         char line[64];
-        if (canstat == 0x80)
-            snprintf(line, sizeof line, "MCP2515 CANSTAT = 0x%02X  (config mode: SPI OK)\r\n", canstat);
+        if (mode == 0x00)
+            snprintf(line, sizeof line, "CANSTAT = 0x%02X  (Normal mode: chip is live)\r\n", canstat);
         else
-            snprintf(line, sizeof line, "MCP2515 CANSTAT = 0x%02X  (UNEXPECTED, wanted 0x80)\r\n", canstat);
+            snprintf(line, sizeof line, "CANSTAT = 0x%02X  (NOT Normal yet, wanted mode bits 000)\r\n", canstat);
         comms.sendLine(line);
         HAL_Delay(1000);
     }
-    // --- end step-1 probe ---------------------------------------------------------------------------
+    // --- end step-2b probe -------------------------------------------------------------------------
 
     watchdog.init();     // arm the IWDG; watchdogTask feeds it
 
