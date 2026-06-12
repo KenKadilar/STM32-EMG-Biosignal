@@ -3,11 +3,13 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
+#include <stdio.h>          // snprintf, for the step-1 CAN probe message (temporary)
 #include "Emg.h"
 #include "Servo.h"
 #include "Comms.h"
 #include "MuscleTrigger.h"
 #include "Watchdog.h"
+#include "Mcp2515CanBus.h"
 
 extern "C" void xPortSysTickHandler(void);   // the kernel tick, defined in the ARM_CM4F port
 
@@ -17,6 +19,7 @@ static Servo         servo;
 static Comms         comms;
 static MuscleTrigger trigger;
 static Watchdog      watchdog;
+static Mcp2515CanBus canBus;
 
 // The brain (DMA ISR) drops one token in here per valid flex; servoTask waits on it. This replaces the
 // old volatile flag: a queue is the safe ISR->task hand-off, it does the locking, so no manual volatile.
@@ -69,6 +72,26 @@ int main(void)
     emg.init();
     servo.init();
     comms.init();
+
+    // --- STEP 1 PROBE (temporary scaffolding; delete once CAN bring-up is verified) -------------------
+    // Can we even talk to the MCP2515? Reset it, then read CANSTAT once a second and print it. Expect
+    // 0x80 = Configuration mode = SPI + wiring + CS all good. This loop never returns, so the normal
+    // FreeRTOS firmware below stays paused while we test CAN in isolation (watchdog not armed yet).
+    canBus.init();
+    canBus.reset();
+    while (1)
+    {
+        uint8_t canstat = canBus.readCanstat();
+        char line[64];
+        if (canstat == 0x80)
+            snprintf(line, sizeof line, "MCP2515 CANSTAT = 0x%02X  (config mode: SPI OK)\r\n", canstat);
+        else
+            snprintf(line, sizeof line, "MCP2515 CANSTAT = 0x%02X  (UNEXPECTED, wanted 0x80)\r\n", canstat);
+        comms.sendLine(line);
+        HAL_Delay(1000);
+    }
+    // --- end step-1 probe ---------------------------------------------------------------------------
+
     watchdog.init();     // arm the IWDG; watchdogTask feeds it
 
     mailBox = xQueueCreate(4, sizeof(uint8_t));   // up to 4 pending flexes, 1 byte each
@@ -96,7 +119,7 @@ extern "C" void USART2_IRQHandler(void)  { comms.onByteReceived(); }
 // ceiling), so calling xQueueSendFromISR from here is allowed.
 extern "C" void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *h)
 {
-    if (trigger.update(emg.read()))
+    if (mailBox != NULL && trigger.update(emg.read()))   // mailBox is NULL until the scheduler is set up
     {
         uint8_t token = 1;
         BaseType_t higherPriorityTaskWoken = pdFALSE;

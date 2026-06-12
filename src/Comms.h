@@ -43,6 +43,12 @@ class Comms
         HAL_UART_Transmit(&huart, (uint8_t *)line, length, 10);   // 10 = give-up timeout (ms)
     }
 
+    // Send a ready-made line of text as-is (e.g. a status message during bring-up).
+    void sendLine(const char *text)
+    {
+        HAL_UART_Transmit(&huart, (uint8_t *)text, strlen(text), 50);   // 50 = give-up timeout (ms)
+    }
+
     // Stream the raw sample, the on-chip centered value, and the signal-valid flag, as "raw,centered,valid".
     void sendStatus(uint16_t raw, int centered, bool valid)
     {
