@@ -50,7 +50,7 @@ static void commsTask(void *params)
     {
         uint16_t raw      = emg.read();
         int      centered = trigger.centered();
-        comms.sendStatus(raw, centered, trigger.isValid());
+        comms.sendStatus(raw, centered, trigger.isElectrodeAttached());
         vTaskDelay(pdMS_TO_TICKS(20));   // ~50 Hz
     }
 }
@@ -64,7 +64,7 @@ static void canTask(void *params)
     while (1)
     {
         uint8_t status[2] = { (uint8_t)(servo.isClosed()  ? 1 : 0),
-                              (uint8_t)(trigger.isValid() ? 1 : 0) };
+                              (uint8_t)(trigger.isElectrodeAttached() ? 1 : 0) };
         canBus.sendFrame(0x101, status, 2);
         vTaskDelay(pdMS_TO_TICKS(200));   // ~5 Hz heartbeat
     }

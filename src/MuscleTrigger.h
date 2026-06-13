@@ -48,7 +48,7 @@ class MuscleTrigger
     }
 
     int  centered() const { return lastCentered; }            // latest centered value (telemetry)
-    bool isValid()  const { return electrodesConnected; }     // is the signal trusted right now?
+    bool isElectrodeAttached() const { return electrodesConnected; }   // signal in trustworthy range (false mainly when an electrode detaches)
 
   private:
     const float RATE          = 0.0002f; // baseline tracker speed (~5 s to follow drift at 1 kHz)
