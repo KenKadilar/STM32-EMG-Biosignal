@@ -73,40 +73,27 @@ int main(void)
     servo.init();
     comms.init();
 
-    // --- STEP 3a PROBE (temporary scaffolding; delete once CAN bring-up is verified) ------------------
-    // Loopback test: the chip routes its own transmit back into its own receiver (no bus wires, no second
-    // node, no ACK). Build a frame, send it, read it back, print both: they should match. This is the
-    // "send == read" bounce. Still SPI-only on the wire. Loop never returns (FreeRTOS firmware paused).
+    // --- STEP 3b PROBE (temporary scaffolding; delete once CAN bring-up is verified) ------------------
+    // Real two-node test: NORMAL mode (not loopback), so the frame leaves the chip on CANH/CANL and
+    // travels to the Arduino. The STM32 only SENDS here; the proof is on the ARDUINO's serial (it prints
+    // each frame it receives). In normal mode our own frame does NOT come back to us, so there's no readback.
     canBus.init();
     canBus.reset();
     canBus.setBitTiming8MHz500k();      // bit timing is writable only in config mode (now, before we leave it)
-    canBus.acceptAllOnRxBuffer0();
-    canBus.enterLoopbackMode();
+    canBus.enterNormalMode();           // go live on the real bus (loopback was internal-only)
     uint8_t counter = 0;
     while (1)
     {
         uint8_t txData[4] = { 0x45, 0x4D, 0x47, counter };   // 'E' 'M' 'G' + a counter (matches the bench frame)
         canBus.sendFrame(0x100, txData, 4);
-        HAL_Delay(5);                                        // let the loopback land in the RX buffer
 
-        char line[96];
-        if (canBus.messageWaiting())
-        {
-            uint16_t rxId;
-            uint8_t  rxData[8];
-            uint8_t  len = canBus.readFrame(&rxId, rxData);
-            snprintf(line, sizeof line, "sent 0x100 [45 4D 47 %02X] -> got 0x%03X [%02X %02X %02X %02X] len=%u\r\n",
-                     counter, rxId, rxData[0], rxData[1], rxData[2], rxData[3], len);
-        }
-        else
-        {
-            snprintf(line, sizeof line, "sent 0x100 counter=%02X -> NOTHING received\r\n", counter);
-        }
+        char line[64];
+        snprintf(line, sizeof line, "sent 0x100 [45 4D 47 %02X] on the CAN bus\r\n", counter);
         comms.sendLine(line);
         counter++;
         HAL_Delay(1000);
     }
-    // --- end step-3a probe -------------------------------------------------------------------------
+    // --- end step-3b probe -------------------------------------------------------------------------
 
     watchdog.init();     // arm the IWDG; watchdogTask feeds it
 
