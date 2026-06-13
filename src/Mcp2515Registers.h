@@ -1,0 +1,47 @@
+// Mcp2515Registers : the MCP2515 datasheet, as code. Every command byte, register address, and bit-field
+// value the driver uses lives here with its datasheet name in the comment, so Mcp2515CanBus.h stays pure
+// logic and you can defend each number against the datasheet (no mystery values from random sites).
+// Notation follows the datasheet: SPI commands + bit-fields in binary (their bit-diagrams), addresses in hex.
+#ifndef MCP2515_REGISTERS_H
+#define MCP2515_REGISTERS_H
+#include <stdint.h>
+
+// === SPI instruction bytes (datasheet Table 12-1 "SPI Instruction Set", shown in binary) ===
+static const uint8_t CMD_RESET               = 0b11000000;  // RESET: chip back to power-on defaults (Config mode)
+static const uint8_t CMD_READ_REGISTER       = 0b00000011;  // READ:  read the register at the address that follows
+static const uint8_t CMD_WRITE_REGISTER      = 0b00000010;  // WRITE: write the value that follows, to that address
+static const uint8_t CMD_REQUEST_TO_SEND_TX0 = 0b10000001;  // RTS, TX buffer 0: "transmit what's loaded, now"
+
+// === Register addresses (datasheet Register Map, shown in hex) ===
+static const uint8_t STATUS_REGISTER   = 0x0E;  // CANSTAT:  current operating mode (top 3 bits)
+static const uint8_t CONTROL_REGISTER  = 0x0F;  // CANCTRL:  requested operating mode (top 3 bits)
+static const uint8_t INTERRUPT_FLAGS   = 0x2C;  // CANINTF:  status flags; bit 0 = RX0IF (frame arrived in RX buffer 0)
+
+static const uint8_t BIT_TIMING_1      = 0x2A;  // CNF1: baud prescaler + sync jump width
+static const uint8_t BIT_TIMING_2      = 0x29;  // CNF2: propagation + phase-1 segment
+static const uint8_t BIT_TIMING_3      = 0x28;  // CNF3: phase-2 segment
+
+static const uint8_t TX_BUFFER0_ID_HIGH = 0x31; // TXB0SIDH: outgoing ID, top 8 bits
+static const uint8_t TX_BUFFER0_ID_LOW  = 0x32; // TXB0SIDL: outgoing ID, bottom 3 bits (in bits 7..5)
+static const uint8_t TX_BUFFER0_LENGTH  = 0x35; // TXB0DLC:  outgoing data length (0..8)
+static const uint8_t TX_BUFFER0_DATA0   = 0x36; // TXB0D0:   first outgoing data byte (D0..D7 = 0x36..0x3D)
+
+static const uint8_t RX_BUFFER0_CONTROL = 0x60; // RXB0CTRL: receive-filter mode
+static const uint8_t RX_BUFFER0_ID_HIGH = 0x61; // RXB0SIDH: received ID, top 8 bits
+static const uint8_t RX_BUFFER0_ID_LOW  = 0x62; // RXB0SIDL: received ID, bottom 3 bits
+static const uint8_t RX_BUFFER0_LENGTH  = 0x65; // RXB0DLC:  received data length
+static const uint8_t RX_BUFFER0_DATA0   = 0x66; // RXB0D0:   first received data byte (0x66..0x6D)
+
+// === Values written INTO registers (datasheet bit-diagrams, shown in binary) ===
+static const uint8_t MODE_NORMAL    = 0b00000000;  // CANCTRL REQOP=000: live on the bus
+static const uint8_t MODE_LOOPBACK  = 0b01000000;  // CANCTRL REQOP=010: TX loops back to RX internally (no bus/ACK)
+static const uint8_t RX_ACCEPT_ANY  = 0b01100000;  // RXB0CTRL RXM=11: accept every frame (ID filters off)
+static const uint8_t CLEAR_ALL_FLAGS = 0b00000000; // CANINTF: all status flags back to 0
+
+// Bit timing for an 8 MHz crystal @ 500 kbps (bench-proven values; fields per the CNF bit-diagrams).
+// 8 time-quanta per bit, sample point ~62.5%. Every node on the bus must use the same effective rate.
+static const uint8_t BIT_TIMING_1_VALUE_8MHZ_500K = 0b00000000; // CNF1: SJW=00 (1 TQ) | BRP=000000 (TQ = 2/8MHz)
+static const uint8_t BIT_TIMING_2_VALUE_8MHZ_500K = 0b10010000; // CNF2: BTLMODE=1 | SAM=0 | PHSEG1=010 | PRSEG=000
+static const uint8_t BIT_TIMING_3_VALUE_8MHZ_500K = 0b10000010; // CNF3: SOF=1 | WAKFIL=0 | PHSEG2=010
+
+#endif
