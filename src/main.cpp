@@ -1,6 +1,6 @@
 // main.cpp : the standalone myoelectric gripper under FreeRTOS. servoTask (~200 Hz) + commsTask (~50 Hz
-// serial telemetry) + canTask (~5 Hz CAN status heartbeat) + watchdogTask. The 1 kHz brain runs in the
-// DMA callback and hands each flex to servoTask through the mailBox queue. File map: FIRMWARE_MAP.md
+// serial telemetry) + canTask (CAN: gesture event + ~5 Hz status heartbeat) + watchdogTask. The 1 kHz
+// brain runs in the DMA callback and hands each flex to servoTask AND canTask via queues. File map: FIRMWARE_MAP.md
 #include "stm32f4xx_hal.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -25,6 +25,8 @@ static Mcp2515CanBus canBus;
 // The brain (DMA ISR) drops one token in here per valid flex; servoTask waits on it. This replaces the
 // old volatile flag: a queue is the safe ISR->task hand-off, it does the locking, so no manual volatile.
 static QueueHandle_t mailBox;
+// A second copy of the same flex signal, for canTask to announce the gesture over CAN immediately.
+static QueueHandle_t canMailBox;
 
 // servoTask : highest priority. Waits on the flex queue, toggles on a flex, eases every cycle.
 static void servoTask(void *params)
@@ -55,18 +57,28 @@ static void commsTask(void *params)
     }
 }
 
-// canTask : broadcast a CAN status heartbeat (~5 Hz) so other nodes know the gripper's state. Two bytes,
-// [gripper closed? 0/1][signal valid? 0/1], under status ID 0x101. SPI2 to the MCP2515 is canTask's alone,
-// so no locking is needed.
+// canTask : reports the gripper over CAN. Blocks on canMailBox with a 200 ms timeout (the servoTask
+// pattern): a queued token (the brain just saw a flex) -> send an immediate GESTURE frame (ID 0x100);
+// a timeout -> send a periodic status heartbeat (ID 0x101). Both carry the same two bytes,
+// [gripper closed? 0/1][electrode attached? 0/1]. SPI2 is canTask's alone, so no locking is needed.
 static void canTask(void *params)
 {
     (void)params;
+    uint8_t token;
     while (1)
     {
-        uint8_t status[2] = { (uint8_t)(servo.isClosed()  ? 1 : 0),
-                              (uint8_t)(trigger.isElectrodeAttached() ? 1 : 0) };
-        canBus.sendFrame(0x101, status, 2);
-        vTaskDelay(pdMS_TO_TICKS(200));   // ~5 Hz heartbeat
+        // Sleep here until either a flex token arrives OR 200 ms passes (then it's a heartbeat).
+        bool gesture = (xQueueReceive(canMailBox, &token, pdMS_TO_TICKS(200)) == pdTRUE);
+
+        uint8_t status[2] = { (uint8_t)servo.isClosed(),                 // bool -> 1 (closed) / 0 (open)
+                              (uint8_t)trigger.isElectrodeAttached() };  // bool -> 1 (attached) / 0 (detached)
+
+        uint16_t frameId;
+        if (gesture)
+            frameId = 0x100;   // a flex just happened -> immediate gesture event
+        else
+            frameId = 0x101;   // nothing new -> periodic status heartbeat
+        canBus.sendFrame(frameId, status, 2);   // both frames carry the same 2 status bytes; only the ID differs
     }
 }
 
@@ -96,8 +108,10 @@ int main(void)
     canBus.setBitTiming8MHz500k();   // 8 MHz crystal @ 500 kbps; must match the other node(s)
     canBus.enterNormalMode();
 
-    mailBox = xQueueCreate(4, sizeof(uint8_t));   // up to 4 pending flexes, 1 byte each
-    configASSERT(mailBox != NULL);                // out of heap -> stop here so it's obvious
+    canMailBox = xQueueCreate(4, sizeof(uint8_t));   // brain -> canTask : announce each flex over CAN
+    mailBox    = xQueueCreate(4, sizeof(uint8_t));   // brain -> servoTask : act on each flex
+    configASSERT(mailBox != NULL && canMailBox != NULL);   // out of heap -> stop here so it's obvious
+    // (canMailBox is created first, so when the ISR sees mailBox != NULL, canMailBox is ready too.)
 
     // priorities (higher = more urgent; idle is 0): servo preempts comms/can preempts watchdog.
     xTaskCreate(servoTask,    "servo",    256, nullptr, 3, nullptr);   // highest: actuation must not be delayed
@@ -122,11 +136,12 @@ extern "C" void USART2_IRQHandler(void)  { comms.onByteReceived(); }
 // ceiling), so calling xQueueSendFromISR from here is allowed.
 extern "C" void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *h)
 {
-    if (mailBox != NULL && trigger.update(emg.read()))   // mailBox is NULL until the scheduler is set up
+    if (mailBox != NULL && trigger.update(emg.read()))   // queues are NULL until the scheduler is set up
     {
         uint8_t token = 1;
         BaseType_t higherPriorityTaskWoken = pdFALSE;
-        xQueueSendFromISR(mailBox, &token, &higherPriorityTaskWoken);
+        xQueueSendFromISR(mailBox,    &token, &higherPriorityTaskWoken);   // wake servoTask (toggle)
+        xQueueSendFromISR(canMailBox, &token, &higherPriorityTaskWoken);   // wake canTask (announce over CAN)
         portYIELD_FROM_ISR(higherPriorityTaskWoken);
     }
 }
