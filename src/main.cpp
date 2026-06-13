@@ -129,7 +129,6 @@ extern "C" void SysTick_Handler(void)
     HAL_IncTick();
     if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED) { xPortSysTickHandler(); }
 }
-extern "C" void USART2_IRQHandler(void)  { comms.onByteReceived(); }
 
 // The 1 kHz brain. On a valid flex, hand a token to servoTask via the queue, then yield so the higher-
 // priority servoTask runs the instant this ISR exits. The DMA interrupt is priority 5 (the syscall
