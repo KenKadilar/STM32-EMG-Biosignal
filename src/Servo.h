@@ -39,6 +39,8 @@ class Servo
     void close()  { closed = true;  targetPosition = CLOSE; }   // choose the closed position
     void toggle() { if (closed) open(); else close(); }         // flip between them
 
+    bool isClosed() const { return closed; }                    // current state (for CAN/serial telemetry)
+
     // Call every loop: move at most 'slew' us toward the target, then write it to the PWM.
     void ease()
     {

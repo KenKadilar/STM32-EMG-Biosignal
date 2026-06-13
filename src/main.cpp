@@ -1,9 +1,10 @@
-// main.cpp : B2 + queue , servoTask (~200 Hz) + commsTask (~50 Hz) + watchdogTask. The brain hands each flex to servoTask through a FreeRTOS queue. The 1 kHz brain stays in the DMA callback. File map: FIRMWARE_MAP.md
+// main.cpp : the standalone myoelectric gripper under FreeRTOS. servoTask (~200 Hz) + commsTask (~50 Hz
+// serial telemetry) + canTask (~5 Hz CAN status heartbeat) + watchdogTask. The 1 kHz brain runs in the
+// DMA callback and hands each flex to servoTask through the mailBox queue. File map: FIRMWARE_MAP.md
 #include "stm32f4xx_hal.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
-#include <stdio.h>          // snprintf, for the step-1 CAN probe message (temporary)
 #include "Emg.h"
 #include "Servo.h"
 #include "Comms.h"
@@ -54,6 +55,21 @@ static void commsTask(void *params)
     }
 }
 
+// canTask : broadcast a CAN status heartbeat (~5 Hz) so other nodes know the gripper's state. Two bytes,
+// [gripper closed? 0/1][signal valid? 0/1], under status ID 0x101. SPI2 to the MCP2515 is canTask's alone,
+// so no locking is needed.
+static void canTask(void *params)
+{
+    (void)params;
+    while (1)
+    {
+        uint8_t status[2] = { (uint8_t)(servo.isClosed()  ? 1 : 0),
+                              (uint8_t)(trigger.isValid() ? 1 : 0) };
+        canBus.sendFrame(0x101, status, 2);
+        vTaskDelay(pdMS_TO_TICKS(200));   // ~5 Hz heartbeat
+    }
+}
+
 // watchdogTask : lowest priority. Pets the IWDG every 500 ms (well inside the ~2 s timeout). Being lowest
 // IS the safety: if a higher task hangs and never yields, this never runs -> never pets -> the chip reboots.
 static void watchdogTask(void *params)
@@ -72,37 +88,21 @@ int main(void)
     emg.init();
     servo.init();
     comms.init();
+    watchdog.init();     // arm the IWDG; watchdogTask feeds it
 
-    // --- STEP 3b PROBE (temporary scaffolding; delete once CAN bring-up is verified) ------------------
-    // Real two-node test: NORMAL mode (not loopback), so the frame leaves the chip on CANH/CANL and
-    // travels to the Arduino. The STM32 only SENDS here; the proof is on the ARDUINO's serial (it prints
-    // each frame it receives). In normal mode our own frame does NOT come back to us, so there's no readback.
+    // CAN: bring up the MCP2515 over SPI2 and go live on the bus (Normal mode). canTask broadcasts status.
     canBus.init();
     canBus.reset();
-    canBus.setBitTiming8MHz500k();      // bit timing is writable only in config mode (now, before we leave it)
-    canBus.enterNormalMode();           // go live on the real bus (loopback was internal-only)
-    uint8_t counter = 0;
-    while (1)
-    {
-        uint8_t txData[4] = { 0x45, 0x4D, 0x47, counter };   // 'E' 'M' 'G' + a counter (matches the bench frame)
-        canBus.sendFrame(0x100, txData, 4);
-
-        char line[64];
-        snprintf(line, sizeof line, "sent 0x100 [45 4D 47 %02X] on the CAN bus\r\n", counter);
-        comms.sendLine(line);
-        counter++;
-        HAL_Delay(1000);
-    }
-    // --- end step-3b probe -------------------------------------------------------------------------
-
-    watchdog.init();     // arm the IWDG; watchdogTask feeds it
+    canBus.setBitTiming8MHz500k();   // 8 MHz crystal @ 500 kbps; must match the other node(s)
+    canBus.enterNormalMode();
 
     mailBox = xQueueCreate(4, sizeof(uint8_t));   // up to 4 pending flexes, 1 byte each
     configASSERT(mailBox != NULL);                // out of heap -> stop here so it's obvious
 
-    // priorities (higher = more urgent; idle is 0): servo preempts comms preempts watchdog.
+    // priorities (higher = more urgent; idle is 0): servo preempts comms/can preempts watchdog.
     xTaskCreate(servoTask,    "servo",    256, nullptr, 3, nullptr);   // highest: actuation must not be delayed
-    xTaskCreate(commsTask,    "comms",    512, nullptr, 2, nullptr);   // middle: telemetry can wait for the servo
+    xTaskCreate(commsTask,    "comms",    512, nullptr, 2, nullptr);   // serial telemetry
+    xTaskCreate(canTask,      "can",      256, nullptr, 2, nullptr);   // CAN status heartbeat
     xTaskCreate(watchdogTask, "watchdog", 128, nullptr, 1, nullptr);   // lowest: starved if anything above hangs
     vTaskStartScheduler();                                             // hand the CPU to the kernel; does NOT return
 
