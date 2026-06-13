@@ -37,16 +37,14 @@ The board is autonomous: the muscle drives everything, the laptop is only a view
 
 ```mermaid
 flowchart TD
-    EMG["Forearm EMG (analog)"] --> ADC["ADC + DMA @ 1 kHz<br/>TIM2-triggered, no CPU per sample (Emg.h)"]
-    ADC --> BRAIN["1 kHz brain, in the DMA ISR<br/>baseline / 50 Hz notch / dip detect / fail-safe<br/>(MuscleTrigger.h + Notch.h)"]
-    BRAIN -->|flex token| MAIL[["mailBox"]]
-    BRAIN -->|flex token| CMAIL[["canMailBox"]]
-    MAIL --> SERVO["servoTask (pri 3)<br/>toggle + ease the gripper (Servo.h)"]
-    CMAIL --> CANT["canTask (pri 2)<br/>CAN gesture 0x100 / status 0x101 (Mcp2515CanBus.h)"]
-    SERVO --> GRIP(["Gripper"])
-    CANT --> BUS(["CAN bus"])
-    COMMS["commsTask (pri 2)<br/>serial telemetry (Comms.h)"] -.-> PC(["Laptop viewer"])
-    WD["watchdogTask (pri 1, lowest)<br/>pets IWDG = watchdog-starvation reboot (Watchdog.h)"]
+    EMG[EMG sensor] --> ADC[ADC + DMA<br/>1 kHz]
+    ADC --> BRAIN[Brain<br/>DMA ISR]
+    BRAIN -->|flex| MB([mailBox])
+    BRAIN -->|flex| CM([canMailBox])
+    MB --> SV[servoTask] --> GR[Gripper]
+    CM --> CT[canTask] --> BUS[CAN bus]
+    ADC --> CO[commsTask] --> LAP[Laptop]
+    WD[watchdogTask] --> IWDG[IWDG reboot]
 ```
 
 Why the decision lives in the **ISR**: the muscle is sampled at 1 kHz by hardware (TIM2 → ADC → DMA), and the lightweight detector runs per-sample in the DMA-complete callback, so a flex is caught immediately and handed to the tasks through FreeRTOS queues (`xQueueSendFromISR`). The **watchdog task is the lowest priority on purpose**: if any higher task hangs, it never runs, never pets the IWDG, and the chip reboots itself.
@@ -167,5 +165,7 @@ This rebuilds the embedded layer of my M.Sc. thesis on single-channel sEMG gestu
 - Journal article (IJANSER, 2024): https://as-proceeding.com/index.php/ijanser/article/view/1728
 - Extended arXiv preprint: https://arxiv.org/abs/2504.15256
 
-**Can KADILAR** | embedded / firmware engineer
-Portfolio: [canarchive.com](https://canarchive.com) | LinkedIn: [can-kadilar](https://www.linkedin.com/in/can-kadilar/) | Email: kadilarmustafacan@gmail.com
+**Can KADILAR** | embedded / firmware engineer  
+Portfolio: [canarchive.com](https://canarchive.com)  
+LinkedIn: [can-kadilar](https://www.linkedin.com/in/can-kadilar/)  
+Email: kadilarmustafacan@gmail.com

@@ -28,7 +28,7 @@ Flash: `pio run -t upload`.
 - `include/FreeRTOSConfig.h` , OUR config (16 MHz HSI clock, 1 kHz tick, 10 KB heap, PendSV/SVC mapped
   to the port). In `include/` so both our code and the kernel see it; the vendor folder stays pure.
 - Hard-float is mandatory for the CM4F port. The wiring is `platformio.ini` `build_flags` +
-  `fpu_link.py` (the link half). Do NOT remove either, the build breaks. See HANDOFF.md.
+  `fpu_link.py` (the link half). Do NOT remove either, the build breaks (see the build note in the README).
 
 ## The 1 kHz brain + the four tasks
 

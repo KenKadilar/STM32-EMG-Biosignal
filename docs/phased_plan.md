@@ -1,6 +1,5 @@
 # Phased plan (build checklist) , COMPLETE
 
-Scope source: `..\..\ChatAssistants\HealthAssistant\CareerAssistant\STM32_Project_Scope.md`.
 All phases done and verified on hardware (2026-06-14). Kept as a record of the build order.
 
 Legend: `[x]` done · `[ ]` deliberately not done (noted).
