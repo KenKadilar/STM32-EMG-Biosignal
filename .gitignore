@@ -25,3 +25,8 @@ Thumbs.db
 # generated gear artifacts
 tools/gear_designer/*.dxf
 tools/gear_designer/gear_preview.png
+
+# vendor datasheet copies (freely available from Microchip; values live in src/Mcp2515Registers.h)
+docs/MCP2515.PDF
+docs/MCP2515_SPI_instruction_set.png
+docs/MCP2515_register_map.png
