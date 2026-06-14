@@ -9,7 +9,7 @@ A self-contained myoelectric gripper on real STM32 firmware: it reads a forearm 
      image-link line below (or keep it as a fallback). -->
 https://github.com/user-attachments/assets/aa81c4aa-91ec-4cf5-a480-a131216e033e
 
-▶ **[Watch the ~30s demo](docs/demo_video_STM32.mp4)**: flex → gripper actuates → state broadcast over CAN, plus the fail-safe (pull an electrode, the gripper holds).
+**[Watch the ~30s demo](docs/demo_video_STM32.mp4)**: flex, gripper actuates, state broadcast over CAN, plus the fail-safe (pull an electrode, the gripper holds).
 
 ---
 
@@ -47,7 +47,7 @@ flowchart TD
     WD[watchdogTask] --> IWDG[IWDG reboot]
 ```
 
-Why the decision lives in the **ISR**: the muscle is sampled at 1 kHz by hardware (TIM2 → ADC → DMA), and the lightweight detector runs per-sample in the DMA-complete callback, so a flex is caught immediately and handed to the tasks through FreeRTOS queues (`xQueueSendFromISR`). The **watchdog task is the lowest priority on purpose**: if any higher task hangs, it never runs, never pets the IWDG, and the chip reboots itself.
+Why the decision lives in the **ISR**: the muscle is sampled at 1 kHz by hardware (TIM2 -> ADC -> DMA), and the lightweight detector runs per-sample in the DMA-complete callback, so a flex is caught immediately and handed to the tasks through FreeRTOS queues (`xQueueSendFromISR`). The **watchdog task is the lowest priority on purpose**: if any higher task hangs, it never runs, never pets the IWDG, and the chip reboots itself.
 
 File-by-file map: [`FIRMWARE_MAP.md`](FIRMWARE_MAP.md).
 
@@ -79,7 +79,7 @@ It's verified end-to-end by an **independent second node**: an Arduino + MCP2515
 | Part | Role |
 |---|---|
 | ST Nucleo-F446RE | STM32F446RE, Cortex-M4F, FPU + DSP, onboard ST-LINK (Mini-USB) |
-| Grove EMG detector | analog EMG envelope → ADC (PA0) |
+| Grove EMG detector | analog EMG envelope -> ADC (PA0) |
 | MCP2515 module | CAN controller + transceiver, driven over SPI2 |
 | TowerPro SG90 servo | gripper actuation (PB6 / TIM4), separate 6 V supply, shared ground |
 | 24 MHz USB logic analyzer | SPI/CAN protocol decode (oscilloscope substitute for digital) |
@@ -98,7 +98,7 @@ mechatronics project: mechanism, electronics, and firmware.
   <img src="docs/gripper_animation.gif" width="49%" alt="Gripper mechanism, open/close animation">
 </p>
 
-### [Rotate the assembled gripper in 3D &rarr;](cad/gripper_assembly.stl)
+### [Rotate the assembled gripper in 3D](cad/gripper_assembly.stl)
 
 GitHub opens `.stl` files in an interactive 3D viewer, click the heading above to spin the model.
 
@@ -120,7 +120,7 @@ pio run -t upload       # flash over ST-LINK (Mini-USB)
 python tools/emg_studio/chip_monitor.py --port COM6
 ```
 
-> **Note on the build:** the FreeRTOS ARM_CM4F port needs the FPU, so the whole image is hard-float. That takes two cooperating pieces, the `build_flags` in [`platformio.ini`](platformio.ini) **and** [`fpu_link.py`](fpu_link.py) (a post-script that forces the link hard-float). Both are required; removing either breaks the link.
+The FreeRTOS ARM_CM4F port needs the FPU, so the whole image is hard-float. That takes two cooperating pieces, the `build_flags` in [`platformio.ini`](platformio.ini) **and** [`fpu_link.py`](fpu_link.py) (a post-script that forces the link hard-float). Both are required; removing either breaks the link.
 
 CI builds the firmware on every push (`.github/workflows/`).
 
