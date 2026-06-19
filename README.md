@@ -165,7 +165,7 @@ This rebuilds the embedded layer of my M.Sc. thesis on single-channel sEMG gestu
 - Journal article (IJANSER, 2024): https://as-proceeding.com/index.php/ijanser/article/view/1728
 - Extended arXiv preprint: https://arxiv.org/abs/2504.15256
 
-**Can KADILAR** | embedded / firmware engineer  
+**Ken KADILAR** | embedded / firmware engineer  
 Portfolio: [canarchive.com](https://canarchive.com)  
-LinkedIn: [can-kadilar](https://www.linkedin.com/in/can-kadilar/)  
-Email: kadilarmustafacan@gmail.com
+LinkedIn: [ken-kadilar](https://www.linkedin.com/in/ken-kadilar/)  
+Email: kenkadilar@gmail.com
