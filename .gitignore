@@ -1,18 +1,11 @@
-# PlatformIO build + dependency cache
 .pio/
-
-# Raw serial-monitor logs (transient; curated copies live in docs/data/)
 logs/
-
-# Build artifacts
 *.bin
 *.elf
 *.hex
 *.map
 *.o
 *.d
-
-# Editor / OS
 .vscode/.browse.c_cpp.db*
 .vscode/c_cpp_properties.json
 .vscode/launch.json
@@ -21,24 +14,16 @@ __pycache__/
 *.pyc
 Thumbs.db
 .DS_Store
-
-# generated gear artifacts
 tools/gear_designer/*.dxf
 tools/gear_designer/gear_preview.png
-
-# vendor datasheet copies (freely available from Microchip; values live in src/Mcp2515Registers.h)
 docs/MCP2515.PDF
 docs/MCP2515_SPI_instruction_set.png
 docs/MCP2515_register_map.png
-
-# editor / assistant config + internal working docs (kept local, not for the public repo)
 .claude/
 *.code-workspace
 HANDOFF.md
 NEXT_CHAT_PROMPT.md
 docs/demo_video_plan.md
-
-# internal planning + orphaned raw captures + stale laptop tools (kept local, not public)
 docs/phased_plan.md
 docs/lessons_learned.md
 docs/80O_resistor_norebound.txt

@@ -1,6 +1,6 @@
 // main.cpp : the standalone myoelectric gripper under FreeRTOS. servoTask (~200 Hz) + commsTask (~50 Hz
 // serial telemetry) + canTask (CAN: gesture event + ~5 Hz status heartbeat) + watchdogTask. The 1 kHz
-// brain runs in the DMA callback and hands each flex to servoTask AND canTask via queues. File map: FIRMWARE_MAP.md
+// brain runs in the DMA callback and hands each flex to servoTask AND canTask via queues.
 #include "stm32f4xx_hal.h"
 #include "FreeRTOS.h"
 #include "task.h"
