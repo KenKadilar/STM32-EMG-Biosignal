@@ -1,4 +1,4 @@
-# STM32 Myoelectric Gripper
+# CAN-Networked Real-Time Myoelectric Gripper Firmware
 
 A self-contained myoelectric gripper on STM32 firmware: it reads a forearm muscle, classifies the gesture on-chip in real time, drives a gripper, reports its state over a CAN bus, and fails safe. It rebuilds the embedded layer of my M.Sc. prosthetic-hand thesis on industrial-grade firmware (STM32, FreeRTOS, CAN).
 
